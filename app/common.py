@@ -11,8 +11,14 @@ def get_logger(name: str) -> logging.Logger:
         level=os.getenv("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stdout,
+        force=True,
     )
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    # Ensure all handlers flush immediately
+    for h in logger.handlers:
+        h.flush()
+    sys.stdout.flush()
+    return logger
 
 
 def env(key: str, default=None, required: bool = False):

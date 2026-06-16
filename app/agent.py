@@ -83,6 +83,10 @@ def _build_plugins() -> list[dict]:
 
 
 def main() -> None:
+    print("=" * 60, flush=True)
+    print("claude-agent-runner starting", flush=True)
+    print("=" * 60, flush=True)
+
     cli_args = _parse_args()
     task = load_task()
     log.info("task=%s", json.dumps({k: v for k, v in task.items() if k != "body"}))

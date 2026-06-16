@@ -17,6 +17,7 @@ WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
 API_KEY = os.environ.get("API_KEY", "")
 ALLOWED = {u.strip().lower() for u in os.environ.get("ALLOWED_USERS", "").split(",") if u.strip()}
 TRIGGER = os.environ.get("TRIGGER_PHRASE", "/fix").strip()
+ISSUE_LABEL = os.environ.get("ISSUE_LABEL", "").strip().lower()
 
 
 def _verify_hmac(raw: bytes, sig: str | None) -> bool:
@@ -59,6 +60,19 @@ async def github(request: Request):
 
     if event == "ping":
         return {"ok": True, "event": "ping"}
+
+    # Handle new issues with matching label
+    if event == "issues" and ISSUE_LABEL:
+        task = _extract_issue(payload)
+        if task is not None:
+            name = k8shelper.create_sandbox(task)
+            return Response(
+                status_code=202,
+                content=json.dumps({"accepted": True, "sandbox": name}),
+                media_type="application/json",
+            )
+        return {"ok": True, "skipped": True}
+
     if event != "issue_comment":
         return {"ok": True, "skipped": True}
 
@@ -118,6 +132,39 @@ async def custom(request: Request):
         content=json.dumps({"accepted": True, "sandbox": name}),
         media_type="application/json",
     )
+
+
+def _extract_issue(p: dict) -> dict | None:
+    """Extract task from issues.opened webhook if it has the target label."""
+    if p.get("action") != "opened":
+        return None
+    issue = p.get("issue", {})
+    labels = {lbl.get("name", "").strip().lower() for lbl in issue.get("labels", []) if lbl.get("name")}
+    if ISSUE_LABEL not in labels:
+        return None
+
+    sender = (p.get("sender") or {}).get("login", "")
+    if not _allowed(sender):
+        return None
+
+    repo = p.get("repository", {})
+    num = issue.get("number")
+    ts = int(time.time())
+    safe = "".join(c.lower() if c.isalnum() else "-" for c in repo.get("full_name", "")).strip("-")
+
+    return {
+        "sandbox_name": f"fix-{safe}-{num}-{ts}"[:58],
+        "repo_full": repo.get("full_name"),
+        "clone_url": repo.get("clone_url"),
+        "default_branch": repo.get("default_branch", "main"),
+        "number": num,
+        "title": issue.get("title", ""),
+        "body": issue.get("body", "") or "",
+        "instruction": "",
+        "sender": sender,
+        "is_pr": False,
+        "reason": f"issue opened with label '{ISSUE_LABEL}'",
+    }
 
 
 def _extract(p: dict) -> dict | None:
