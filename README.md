@@ -4,15 +4,45 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 ## How It Works
 
+```mermaid
+flowchart TD
+    subgraph Triggers["Trigger Sources"]
+        GH["GitHub Webhook<br/>issue_comment / tag / label"]
+        CUSTOM["Custom Webhook<br/>REST API"]
+        SCHEDULE["Scheduler<br/>periodic crawl"]
+    end
+
+    subgraph Receiver["Receiver (FastAPI)"]
+        VERIFY["Verify Auth<br/>HMAC or API Key"]
+        ALLOWED["Check Allowlist<br/>users / labels / tags"]
+        CREATE["Create Sandbox CR<br/>per task"]
+    end
+
+    subgraph Sandbox["Sandbox Pod (ephemeral)"]
+        CLONE["Clone repo"]
+        RUN["Run Claude Agent SDK<br/>headless mode"]
+        COMMIT["Commit & Push"]
+        PR["Create Pull Request"]
+        DELETE["Self-delete Sandbox CR"]
+    end
+
+    subgraph Config["Configuration Controls"]
+        MODE["Trigger Mode<br/>(/fix comment / label / tag)"]
+        ALLOW["Allowlist<br/>(users / labels / tags)"]
+        PROMPT["System Prompt<br/>+ per-task instruction"]
+    end
+
+    Triggers -->|webhook payload| Receiver
+    Config -->|settings| Receiver
+    Receiver -->|create| Sandbox
+    Sandbox -.->|done| DELETE
+
+    style Sandbox fill:#1a1a2e,stroke:#e94560
+    style Receiver fill:#16213e,stroke:#0f3460
+    style Config fill:#0f3460,stroke:#e94560,stroke-dasharray: 5 5
 ```
-GitHub issue_comment with /fix
-  ↓ HMAC verify
-receiver.py (FastAPI)
-  ↓ Create Sandbox CR
-agent-sandbox operator
-  ↓ Spawn pod
-agent.py — clone repo → Claude Agent SDK → fix → commit → push → PR → self-delete
-```
+
+**Flexible triggering:** The receiver can pick up issues based on configuration — by comment trigger (`/fix`), by label, by tag, or on demand via the custom API. The scheduler mode crawls for open matching issues periodically. All modes are controlled through env vars.
 
 One Docker image, two entrypoints:
 - **Receiver** (default): FastAPI webhook service (long-running deployment)
@@ -36,11 +66,22 @@ All configuration is through environment variables. See [docs/configuration.md](
 
 ### Required Secrets
 
+Authentication with GitHub — choose either a **GitHub App** (fine-grained, recommended) or a **Personal Access Token** (simpler):
+
+**Option A — GitHub App:**
 | Variable | Source | Purpose |
 |---|---|---|
 | `GH_APP_ID` | GitHub App settings | GitHub App authentication |
 | `GH_PRIVATE_KEY` | GitHub App private key | JWT signing for installation tokens |
 | `GITHUB_WEBHOOK_SECRET` | GitHub App settings | HMAC webhook verification |
+
+**Option B — Personal Access Token:**
+| Variable | Source | Purpose |
+|---|---|---|
+| `GH_TOKEN` | GitHub Settings → Developer settings | Fine-grained PAT with Contents+Issues+PRs write |
+| `GITHUB_WEBHOOK_SECRET` | Your own secret | HMAC webhook verification |
+
+Set `GH_TOKEN` instead of `GH_APP_ID` + `GH_PRIVATE_KEY` for simpler setup. The agent uses whichever is provided.
 
 ### Authentication
 

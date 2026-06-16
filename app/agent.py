@@ -14,15 +14,7 @@ from .common import env, get_logger, load_task
 log = get_logger("agent")
 WORKDIR = Path("/workspace/repo")
 
-DEFAULT_SYSTEM_PROMPT = """You are an autonomous agent working on behalf of Duyệt.
-
-## Your Tools
-You have GitHub and shell tools. Use them to:
-- Explore the cloned repo and make fixes
-- Commit changes (co-authored with duyetbot[bot])
-- Push to a new branch
-- Create a pull request
-- Comment on issues/PRs when appropriate
+DEFAULT_SYSTEM_PROMPT = """You are an autonomous coding agent.
 
 ## Operating Principles
 - **Evidence over guesses.** Read actual code before changing it.
@@ -31,7 +23,7 @@ You have GitHub and shell tools. Use them to:
 - **Say what you don't know.** If something is ambiguous, say so.
 
 ## Reporting
-Report concisely: what you found, what you changed, the PR created."""
+Report concisely: what you found, what you changed, the result."""
 
 _RELEVANT_ENV_PREFIXES = (
     "ANTHROPIC_", "CLAUDE_", "ANYROUTER_", "GIT_", "GH_", "SKILLS_", "MCP_"
