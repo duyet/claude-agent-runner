@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600">
+  <defs>
+    <!-- Arrow marker -->
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#c9d1d9" />
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#238636" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#1f6feb" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="600" fill="#0d1117" />
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" fill="#c9d1d9" font-size="24" font-weight="bold">Agent Runner Flow Diagram</text>
+
+  <!-- Phase 1: Trigger -->
+  <g transform="translate(50, 80)">
+    <rect width="200" height="80" rx="10" fill="#161b22" stroke="#238636" stroke-width="2"/>
+    <text x="100" y="30" text-anchor="middle" fill="#238636" font-size="16" font-weight="bold">🌐 ① Trigger</text>
+    <text x="100" y="55" text-anchor="middle" fill="#c9d1d9" font-size="12">GitHub Issue /fix</text>
+    <text x="100" y="70" text-anchor="middle" fill="#c9d1d9" font-size="12">Custom webhook</text>
+  </g>
+
+  <!-- Arrow 1 -->
+  <line x1="250" y1="120" x2="290" y2="120" stroke="#238636" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <text x="270" y="110" text-anchor="middle" fill="#238636" font-size="11">HMAC/API</text>
+
+  <!-- Phase 2: Receiver -->
+  <g transform="translate(300, 80)">
+    <rect width="220" height="80" rx="10" fill="#161b22" stroke="#1f6feb" stroke-width="2"/>
+    <text x="110" y="30" text-anchor="middle" fill="#1f6feb" font-size="16" font-weight="bold">⚙️ ② Receiver</text>
+    <text x="110" y="50" text-anchor="middle" fill="#c9d1d9" font-size="12">FastAPI verifies request</text>
+    <text x="110" y="68" text-anchor="middle" fill="#c9d1d9" font-size="12">→ Create Sandbox CR</text>
+  </g>
+
+  <!-- Arrow 2 -->
+  <line x1="520" y1="120" x2="560" y2="120" stroke="#1f6feb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <text x="540" y="110" text-anchor="middle" fill="#1f6feb" font-size="11">K8s API</text>
+
+  <!-- Kubernetes API -->
+  <g transform="translate(570, 100)">
+    <rect width="120" height="40" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="2"/>
+    <text x="60" y="25" text-anchor="middle" fill="#f0883e" font-size="12" font-weight="bold">☸️ API</text>
+  </g>
+
+  <!-- Dashed arrow to operator -->
+  <path d="M 630 140 L 630 180 L 750 180" stroke="#3fb950" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrow)"/>
+  <text x="690" y="170" text-anchor="middle" fill="#3fb950" font-size="11">CR created</text>
+
+  <!-- Operator (standalone) -->
+  <g transform="translate(760, 150)">
+    <rect width="180" height="60" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+    <text x="90" y="20" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="bold">🔵 Operator</text>
+    <text x="90" y="40" text-anchor="middle" fill="#c9d1d9" font-size="11">Watches Sandbox CR</text>
+    <text x="90" y="55" text-anchor="middle" fill="#c9d1d9" font-size="11">Spawns Agent Pod</text>
+  </g>
+
+  <!-- Arrow from operator to agent -->
+  <line x1="850" y1="210" x2="850" y2="250" stroke="#3fb950" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <text x="870" y="235" text-anchor="middle" fill="#3fb950" font-size="11">Spawn</text>
+
+  <!-- Phase 4: Agent Execution -->
+  <g transform="translate(720, 260)">
+    <rect width="260" height="250" rx="10" fill="#161b22" stroke="#f78166" stroke-width="2"/>
+    <text x="130" y="25" text-anchor="middle" fill="#f78166" font-size="16" font-weight="bold">🤖 ④ Agent Pod</text>
+
+    <!-- Steps -->
+    <g transform="translate(20, 45)">
+      <rect width="220" height="35" rx="6" fill="#0d1117" stroke="#a371f7" stroke-width="1"/>
+      <text x="110" y="23" text-anchor="middle" fill="#a371f7" font-size="12" font-weight="bold">1. Clone repository</text>
+    </g>
+
+    <g transform="translate(20, 90)">
+      <rect width="220" height="35" rx="6" fill="#0d1117" stroke="#f78166" stroke-width="1"/>
+      <text x="110" y="23" text-anchor="middle" fill="#f78166" font-size="12" font-weight="bold">2. Run Claude Agent SDK</text>
+    </g>
+
+    <g transform="translate(20, 135)">
+      <rect width="220" height="35" rx="6" fill="#0d1117" stroke="#238636" stroke-width="1"/>
+      <text x="110" y="23" text-anchor="middle" fill="#238636" font-size="12" font-weight="bold">3. State tracking</text>
+    </g>
+
+    <g transform="translate(20, 180)">
+      <rect width="220" height="35" rx="6" fill="#0d1117" stroke="#f0883e" stroke-width="1"/>
+      <text x="110" y="23" text-an>
+       middle" fill="#f0883e" font-size="12" font-weight="bold">4. Git operations</text>
+    </g>
+
+    <g transform="translate(20, 225)">
+      <rect width="220" height="35" rx="6" fill="#0d1117" stroke:#8b949e" stroke-width="1"/>
+      <text x="110" y="23" text-anchor="middle" fill="#8b949e" font-size="12" font-weight="bold">5. Self-delete Sandbox CR</text>
+    </g>
+  </g>
+
+  <!-- State Storage (side connection) -->
+  <g transform="translate(50, 320)">
+    <rect width="200" height="120" rx="10" fill="#161b22" stroke="#8957e5" stroke-width="2"/>
+    <text x="100" y="25" text-anchor="middle" fill="#8957e5" font-size="14" font-weight="bold">💾 State</text>
+
+    <g transform="translate(15, 40)">
+      <rect width="55" height="25" rx="5" fill="#0d1117" stroke:#238636" stroke-width="1"/>
+      <text x="27" y="17" text-anchor="middle" fill="#238636" font-size="10">🏃 Iso</text>
+    </g>
+
+    <g transform="translate(80, 40)">
+      <rect width="55" height="25" rx="5" fill="#0d1117" stroke:#1f6feb" stroke-width="1"/>
+      <text x="27" y="17" text-anchor="middle" fill="#1f6feb" font-size="10">🔄 Shared</text>
+    </g>
+
+    <g transform="translate(145, 40)">
+      <rect width="40" height="25" rx="5" fill="#0d1117" stroke:#a371f7" stroke-width="1"/>
+      <text x="20" y="17" text-an>
+       middle" fill="#a371f7" font-size="10">DB</text>
+    </g>
+
+    <text x="100" y="90" text-anchor="middle" fill="#c9d1d9" font-size="11">Persistent sessions</text>
+    <text x="100" y="105" text-anchor="middle" fill="#c9d1d9" font-size="11">Run history</text>
+  </g>
+
+  <!-- Connection to state -->
+  <path d="M 720 385 L 250 385" stroke="#8957e5" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="485" y="375" text-anchor="middle" fill="#8957e5" font-size="11">Read/Write</text>
+
+  <!-- Phase 5: Cleanup -->
+  <g transform="translate(720, 530)">
+    <rect width="260" height="50" rx="10" fill="#161b22" stroke="#8b949e" stroke-width="2"/>
+    <text x="130" y="20" text-anchor="middle" fill="#8b949e" font-size="14" font-weight="bold">🗑️ ⑤ Cleanup</text>
+    <text x="130" y="38" text-anchor="middle" fill="#c9d1d9" font-size="11">Operator removes Agent Pod</text>
+  </g>
+
+  <!-- Arrow from agent to cleanup -->
+  <line x1="850" y1="510" x2="850" y2="530" stroke="#8b949e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Legend -->
+  <g transform="translate(50, 460)">
+    <rect width="500" height="120" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="250" y="25" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="bold">Lifecycle Legend</text>
+
+    <g transform="translate(20, 40)">
+      <circle cx="10" cy="10" r="6" fill="#238636"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Green: Trigger/Git</text>
+    </g>
+
+    <g transform="translate(150, 40)">
+      <circle cx="10" cy="10" r="6" fill="#1f6feb"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Blue: Receiver</text>
+    </g>
+
+    <g transform="translate(280, 40)">
+      <circle cx="10" cy="10" r="6" fill="#3fb950"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Green: Operator</text>
+    </g>
+
+    <g transform="translate(20, 70)">
+      <circle cx="10" cy="10" r="6" fill="#f78166"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Orange: Agent</text>
+    </g>
+
+    <g transform="translate(150, 70)">
+      <circle cx="10" cy="10" r="6" fill="#8957e5"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Purple: State</text>
+    </g>
+
+    <g transform="translate(280, 70)">
+      <circle cx="10" cy="10" r="6" fill="#8b949e"/>
+      <text x="25" y="14" fill="#c9d1d9" font-size="11">Gray: Cleanup</text>
+    </g>
+
+    <text x="20" y="105" fill="#8b949e" font-size="11">Dashed lines: Optional/Indirect connections</text>
+    <text x="300" y="105" fill="#8b949e" font-size="11">Solid lines: Direct flow</text>
+  </g>
+
+  <!-- Flow description -->
+  <g transform="translate(580, 460)">
+    <rect width="570" height="120" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+    <text x="285" y="25" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="bold">Flow Summary</text>
+
+    <text x="20" y="50" fill="#c9d1d9" font-size="11">1. User triggers via GitHub /fix or webhook</text>
+    <text x="20" y="68" fill="#c9d1d9" font-size="11">2. Receiver verifies → creates Sandbox CR via Kubernetes API</text>
+    <text x="20" y="86" fill="#c9d1d9" font-size="11">3. Operator watches CR → spawns ephemeral Agent Pod</text>
+    <text x="20" y="104" fill="#c9d1d9" font-size="11">4. Agent: Clone → SDK → State → Git ops → Self-delete</text>
+  </g>
+</svg>
