@@ -18,88 +18,88 @@
   <text x="500" y="35" text-anchor="middle" class="s" fill="#141413" font-size="16px" font-weight="500">Agent Runner Flow</text>
 
   <!-- Phase 1: Trigger -->
-  <rect x="50" y="80" width="150" height="70" rx="10" fill="#788C5D" stroke="#141413" stroke-width="2"/>
+  <rect x="50" y="80" width="150" height="70" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1"/>
   <text x="125" y="105" text-anchor="middle" class="m" fill="#FAF9F5">🌐 ①</text>
   <text x="125" y="125" text-anchor="middle" class="s" fill="#FAF9F5">Trigger</text>
   <text x="125" y="140" text-anchor="middle" class="s" fill="#E3DACC">GitHub /fix</text>
 
   <!-- Arrow 1 -->
-  <line x1="200" y1="115" x2="240" y2="115" stroke="#788C5D" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="200" y1="115" x2="240" y2="115" stroke="#788C5D" stroke-width="1" marker-end="url(#arrow-green)"/>
   <text x="220" y="105" text-anchor="middle" class="s" fill="#788C5D">webhook</text>
 
   <!-- Phase 2: Receiver -->
-  <rect x="240" y="80" width="180" height="70" rx="10" fill="#D97757" stroke="#141413" stroke-width="2"/>
+  <rect x="240" y="80" width="180" height="70" rx="10" fill="#D97757" stroke="#141413" stroke-width="1"/>
   <text x="330" y="105" text-anchor="middle" class="m" fill="#FAF9F5">⚙️ ②</text>
   <text x="330" y="125" text-anchor="middle" class="s" fill="#FAF9F5">Receiver</text>
   <text x="330" y="140" text-anchor="middle" class="s" fill="#E3DACC">Verify → Create CR</text>
 
   <!-- Arrow 2 -->
-  <line x1="420" y1="115" x2="460" y2="115" stroke="#87867F" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="420" y1="115" x2="460" y2="115" stroke="#87867F" stroke-width="1" marker-end="url(#arrow)"/>
   <text x="440" y="105" text-anchor="middle" class="s" fill="#87867F">K8s API</text>
 
   <!-- Kubernetes API -->
-  <rect x="460" y="95" width="100" height="40" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1.5"/>
+  <rect x="460" y="95" width="100" height="40" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1"/>
   <text x="510" y="120" text-anchor="middle" class="s" fill="#141413">☸️ API</text>
 
   <!-- Dashed arrow to operator -->
-  <path d="M 560 115 L 590 115 L 590 180 L 730 180" fill="none" stroke="#87867F" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <path d="M 560 115 L 590 115 L 590 180 L 730 180" fill="none" stroke="#87867F" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
   <text x="660" y="170" text-anchor="middle" class="s" fill="#87867F">CR created</text>
 
   <!-- Operator -->
-  <rect x="730" y="150" width="150" height="60" rx="10" fill="#788C5D" stroke="#141413" stroke-width="2"/>
+  <rect x="730" y="150" width="150" height="60" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1"/>
   <text x="805" y="175" text-anchor="middle" class="m" fill="#FAF9F5">🔵 ③</text>
   <text x="805" y="195" text-anchor="middle" class="s" fill="#FAF9F5">Operator</text>
 
   <!-- Arrow from operator to agent -->
-  <line x1="805" y1="210" x2="805" y2="250" stroke="#788C5D" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="805" y1="210" x2="805" y2="250" stroke="#788C5D" stroke-width="1" marker-end="url(#arrow-green)"/>
   <text x="825" y="235" text-anchor="middle" class="s" fill="#788C5D">spawn</text>
 
   <!-- Phase 4: Agent Pod -->
-  <rect x="680" y="250" width="250" height="280" rx="10" fill="#D97757" stroke="#141413" stroke-width="2"/>
+  <rect x="680" y="250" width="250" height="280" rx="10" fill="#D97757" stroke="#141413" stroke-width="1"/>
   <text x="805" y="280" text-anchor="middle" class="m" fill="#FAF9F5">🤖 ④ Agent Pod</text>
 
   <!-- Agent steps -->
-  <rect x="700" y="300" width="210" height="35" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <rect x="700" y="300" width="210" height="35" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
   <text x="805" y="322" text-anchor="middle" class="s" fill="#141413">1. Clone repository</text>
 
-  <rect x="700" y="345" width="210" height="35" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <rect x="700" y="345" width="210" height="35" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1"/>
   <text x="805" y="367" text-anchor="middle" class="s" fill="#3D3D3A">2. Run Claude Agent SDK</text>
 
-  <rect x="700" y="390" width="210" height="35" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1.5"/>
+  <rect x="700" y="390" width="210" height="35" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1"/>
   <text x="805" y="412" text-anchor="middle" class="s" fill="#FAF9F5">3. State tracking</text>
 
-  <rect x="700" y="435" width="210" height="35" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1.5"/>
+  <rect x="700" y="435" width="210" height="35" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1"/>
   <text x="805" y="457" text-anchor="middle" class="s" fill="#141413">4. Git operations</text>
 
-  <rect x="700" y="480" width="210" height="35" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <rect x="700" y="480" width="210" height="35" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1"/>
   <text x="805" y="502" text-anchor="middle" class="s" fill="#3D3D3A">5. Self-delete CR</text>
 
   <!-- State Storage -->
-  <rect x="50" y="250" width="200" height="140" rx="10" fill="#87867F" stroke="#141413" stroke-width="2"/>
+  <rect x="50" y="250" width="200" height="140" rx="10" fill="#87867F" stroke="#141413" stroke-width="1"/>
   <text x="150" y="280" text-anchor="middle" class="m" fill="#FAF9F5">💾 State</text>
 
-  <rect x="70" y="300" width="50" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <rect x="70" y="300" width="50" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1"/>
   <text x="95" y="325" text-anchor="middle" class="m" fill="#3D3D3A">🏃</text>
 
-  <rect x="130" y="300" width="50" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <rect x="130" y="300" width="50" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1"/>
   <text x="155" y="325" text-anchor="middle" class="m" fill="#3D3D3A">🔄</text>
 
-  <rect x="70" y="350" width="50" height="35" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <rect x="70" y="350" width="50" height="35" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
   <text x="95" y="372" text-anchor="middle" class="s" fill="#141413">🗄️ DB</text>
 
   <!-- Connection to state -->
-  <path d="M 250 320 L 680 320" fill="none" stroke="#87867F" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <path d="M 250 320 L 680 320" fill="none" stroke="#87867F" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
   <text x="465" y="310" text-anchor="middle" class="s" fill="#87867F">Read/Write</text>
 
   <!-- Phase 5: Cleanup -->
-  <rect x="680" y="550" width="250" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <rect x="680" y="550" width="250" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1"/>
   <text x="805" y="575" text-anchor="middle" class="s" fill="#3D3D3A">🗑️ ⑤ Cleanup</text>
 
   <!-- Arrow from agent to cleanup -->
-  <line x1="805" y1="515" x2="805" y2="550" stroke="#87867F" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="805" y1="515" x2="805" y2="550" stroke="#87867F" stroke-width="1" marker-end="url(#arrow)"/>
 
   <!-- Legend -->
-  <rect x="50" y="420" width="250" height="100" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <rect x="50" y="420" width="250" height="100" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
   <text x="175" y="445" text-anchor="middle" class="s" fill="#141413">Legend</text>
 
   <circle cx="80" cy="465" r="5" fill="#788C5D"/>
