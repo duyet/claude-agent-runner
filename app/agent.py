@@ -14,9 +14,25 @@ from .common import env, get_logger, load_task
 log = get_logger("agent")
 WORKDIR = Path("/workspace/repo")
 
-# Prefixes for env vars to forward to the SDK subprocess.
-# Any env var matching these prefixes is passed through automatically —
-# no need to cherry-pick individual variables.
+DEFAULT_SYSTEM_PROMPT = """You are an autonomous agent working on behalf of Duyệt.
+
+## Your Tools
+You have GitHub and shell tools. Use them to:
+- Explore the cloned repo and make fixes
+- Commit changes (co-authored with duyetbot[bot])
+- Push to a new branch
+- Create a pull request
+- Comment on issues/PRs when appropriate
+
+## Operating Principles
+- **Evidence over guesses.** Read actual code before changing it.
+- **Minimal diffs.** Fix the specific problem. Don't reformat unrelated code.
+- **Don't break tests.** Run tests and verify they pass.
+- **Say what you don't know.** If something is ambiguous, say so.
+
+## Reporting
+Report concisely: what you found, what you changed, the PR created."""
+
 _RELEVANT_ENV_PREFIXES = (
     "ANTHROPIC_", "CLAUDE_", "ANYROUTER_", "GIT_", "GH_", "SKILLS_", "MCP_"
 )
@@ -33,6 +49,45 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Extra text appended to the system prompt",
     )
     return p.parse_args(argv)
+
+
+def _build_system_prompt(cli_args: argparse.Namespace | None = None) -> str:
+    path = env("SYSTEM_PROMPT_PATH")
+    if path:
+        system_prompt = Path(path).read_text()
+    else:
+        system_prompt = DEFAULT_SYSTEM_PROMPT
+
+    append = (
+        cli_args.append_system_prompt
+        if cli_args and cli_args.append_system_prompt
+        else env("APPEND_SYSTEM_PROMPT", "")
+    )
+    if append:
+        system_prompt += f"\n\n{append}"
+
+    return system_prompt
+
+
+def _build_plugins() -> list[dict]:
+    plugins: list[dict] = []
+
+    raw = env("PLUGINS")
+    if raw:
+        try:
+            plugins.extend(json.loads(raw))
+        except json.JSONDecodeError as e:
+            log.warning("invalid PLUGINS JSON: %s", e)
+
+    # Backward compat: SKILLS_DIR entries are loaded as local plugins
+    skills_dir = env("SKILLS_DIR")
+    if skills_dir:
+        for d in skills_dir.split(","):
+            d = d.strip()
+            if d:
+                plugins.append({"type": "local", "path": d})
+
+    return plugins
 
 
 def main() -> None:
@@ -77,21 +132,13 @@ def main() -> None:
 async def run_agent_sdk(prompt: str, cli_args: argparse.Namespace | None = None):
     from claude_agent_sdk import ClaudeAgentOptions, query
 
-    system_prompt_path = env("SYSTEM_PROMPT_PATH", "/opt/persona/SYSTEM.md")
     allowed_tools_str = env(
         "ALLOWED_TOOLS",
         "Read,Write,Edit,Bash,Glob,Grep,GitHub,WebSearch,WebFetch",
     )
     allowed_tools = [t.strip() for t in allowed_tools_str.split(",") if t.strip()]
 
-    system_prompt = Path(system_prompt_path).read_text()
-    append = (
-        cli_args.append_system_prompt
-        if cli_args and cli_args.append_system_prompt
-        else env("APPEND_SYSTEM_PROMPT", "")
-    )
-    if append:
-        system_prompt += f"\n\n{append}"
+    system_prompt = _build_system_prompt(cli_args)
 
     model = (
         cli_args.model
@@ -107,16 +154,32 @@ async def run_agent_sdk(prompt: str, cli_args: argparse.Namespace | None = None)
     opts = ClaudeAgentOptions(
         cwd=str(WORKDIR),
         system_prompt=system_prompt,
-        permission_mode=env("CLAUDE_PERMISSION_MODE", "bypassPermissions"),
+        permission_mode=env("CLAUDE_PERMISSION_MODE", "auto"),
         allowed_tools=allowed_tools,
         model=model,
         max_turns=max_turns,
     )
 
+    raw = env("SETTING_SOURCES", "user,project")
+    setting_sources = [s.strip() for s in raw.split(",") if s.strip()]
+    if setting_sources:
+        opts.setting_sources = setting_sources
+
+    skills_val = env("SKILLS", "all")
+    if skills_val == "none":
+        opts.skills = []
+    elif skills_val == "all":
+        opts.skills = "all"
+    else:
+        opts.skills = [s.strip() for s in skills_val.split(",") if s.strip()]
+
+    # Plugin loading from env
+    plugins = _build_plugins()
+    if plugins:
+        opts.plugins = plugins
+
     # Forward relevant env vars to the SDK subprocess so it can read
     # ANTHROPIC_API_KEY, ANTHROPIC_PLUGIN_MARKETPLACES, etc. directly.
-    # Any env var matching the configured prefixes is included automatically —
-    # no need to add explicit support for each new variable.
     sdk_env = {
         k: v for k, v in os.environ.items()
         if k.startswith(_RELEVANT_ENV_PREFIXES) and v
@@ -124,12 +187,6 @@ async def run_agent_sdk(prompt: str, cli_args: argparse.Namespace | None = None)
     if sdk_env:
         opts.env = sdk_env
 
-    # Optional skills preload — comma-separated paths to skill directories
-    skills_dir = env("SKILLS_DIR")
-    if skills_dir:
-        opts.skills_dir = [d.strip() for d in skills_dir.split(",") if d.strip()]
-
-    # Optional MCP server config — JSON string
     mcp_servers = env("MCP_SERVERS")
     if mcp_servers:
         opts.mcp_servers = json.loads(mcp_servers)

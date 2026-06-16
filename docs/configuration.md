@@ -93,7 +93,7 @@ For cloud provider auth, set the corresponding env vars in the pod (SDK auto-det
 |---|---|---|
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5-20250929` | Model ID |
 | `ANTHROPIC_BASE_URL` | — | Custom base URL (e.g. `https://anyrouter.dev/api`). SDK appends `/v1/messages` |
-| `CLAUDE_PERMISSION_MODE` | `bypassPermissions` | Permission mode: bypassPermissions, dontAsk, acceptEdits, default |
+| `CLAUDE_PERMISSION_MODE` | `auto` | Permission mode: auto, bypassPermissions, dontAsk, acceptEdits, default |
 | `CLAUDE_MAX_TURNS` | `50` | Max conversation turns |
 | `APPEND_SYSTEM_PROMPT` | — | Extra text appended to the system prompt (also settable via `--append-system-prompt` CLI arg) |
 
@@ -105,13 +105,16 @@ For cloud provider auth, set the corresponding env vars in the pod (SDK auto-det
 
 Available tools: Read, Write, Edit, Bash, Glob, Grep, Git, GitHub, WebSearch, WebFetch, Monitor, Agent
 
-### Skills & MCP
+### Skills, Plugins & MCP
 
 | Variable | Default | Description |
 |---|---|---|
-| `SKILLS_DIR` | — | Comma-separated paths to skill directories |
+| `SETTING_SOURCES` | `user,project` | SDK filesystem sources for skill autodiscovery |
+| `SKILLS` | `all` | Skill filter: `all`, `none`, or comma-separated names |
+| `SKILLS_DIR` | — | *(backward compat)* Comma-separated paths to skill directories, loaded as local plugins |
+| `PLUGINS` | — | JSON array of plugin configs, e.g. `[{"type": "local", "path": "/opt/plugins/..."}]` |
 | `MCP_SERVERS` | — | JSON object of MCP server configs |
-| `SYSTEM_PROMPT_PATH` | `/opt/persona/SYSTEM.md` | Path to system prompt file |
+| `SYSTEM_PROMPT_PATH` | *(embedded)* | Path to system prompt file (overrides `DEFAULT_SYSTEM_PROMPT`) |
 
 ### Git
 

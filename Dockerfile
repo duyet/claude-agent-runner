@@ -9,20 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -u 1000 -m -d /home/agent agent
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-
 WORKDIR /app
 
 COPY pyproject.toml uv.lock /app/
-RUN uv sync --frozen --no-dev --system
+RUN pip install uv && \
+    uv sync --frozen --no-dev --system && \
+    rm -rf ~/.cache
 
 # Allow the app package to be importable from any cwd
 ENV PYTHONPATH=/app
 
 COPY app/    /app/app/
-COPY persona/ /opt/persona/
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
-# Default: webhook receiver. Sandbox pods override CMD with "python -m app.agent".
 CMD ["uvicorn", "app.receiver:app", "--host", "0.0.0.0", "--port", "8080"]

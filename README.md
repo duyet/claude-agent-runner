@@ -66,7 +66,7 @@ The SDK appends `/v1/messages`, so the base URL must stop at `/api`. Keep the `a
 
 ### Permissions & Tools
 
-Default permission mode: `bypassPermissions` (all tools auto-approved).
+Default permission mode: `auto` (background safety checks, blocks dangerous actions).
 
 Default allowed tools: `Read,Write,Edit,Bash,Glob,Grep,GitHub,WebSearch,WebFetch`
 
@@ -87,11 +87,18 @@ Default allowed tools: `Read,Write,Edit,Bash,Glob,Grep,GitHub,WebSearch,WebFetch
 
 Override with `ALLOWED_TOOLS` env var.
 
-### Skills & MCP
+### Skills, Plugins & MCP
 
 ```yaml
-# Load skills from directories (comma-separated)
+# SDK skill discovery (auto-discovers .claude/skills/ in the cloned repo)
+SETTING_SOURCES: user,project
+SKILLS: all
+
+# Load skills from directories as plugins (comma-separated paths)
 SKILLS_DIR: /opt/skills/custom,/opt/skills/testing
+
+# Extra plugin directories (JSON array)
+PLUGINS: '[{"type": "local", "path": "/opt/plugins/my-plugin"}]'
 
 # MCP servers (JSON)
 MCP_SERVERS: '{"playwright": {"command": "npx", "args": ["@playwright/mcp@latest"]}}'

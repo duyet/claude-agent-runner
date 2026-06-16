@@ -7,7 +7,7 @@
 
 General-purpose Claude Agent SDK runner for Kubernetes. Receives webhook triggers (`/fix` on issue comments), spawns ephemeral Sandbox pods, and lets the agent handle everything via its built-in tools.
 
-**NOT a code-fixing tool specifically** — it's a general-purpose runner. The system prompt (persona/SYSTEM.md) controls agent behavior. Change the prompt, change the behavior.
+**NOT a code-fixing tool specifically** — it's a general-purpose runner. The default system prompt is embedded in `app/agent.py`. Override via `SYSTEM_PROMPT_PATH` env var or `APPEND_SYSTEM_PROMPT`.
 
 ## Repo Layout
 
@@ -19,8 +19,7 @@ app/
   gh_token.py       # GitHub App JWT → installation token (cached, 60-min TTL)
   k8shelper.py      # Create/delete Sandbox CRs (agents.x-k8s.io/v1alpha1)
   receiver.py       # FastAPI webhook receiver — HMAC verify, /fix extract, CR create
-persona/
-  SYSTEM.md         # Agent system prompt — controls behavior
+
 Dockerfile          # Single image, two entrypoints: receiver (default) or agent
 pyproject.toml       # Project metadata + dependencies
 uv.lock              # Locked dependency versions
@@ -57,7 +56,7 @@ agent.py (inside pod — clone repo → run Claude Agent SDK → self-delete)
 | `app/agent.py` | Runs in sandbox — clones repo, launches Claude Agent SDK |
 | `app/gh_token.py` | GitHub App JWT → installation access token (cached) |
 | `app/k8shelper.py` | Sandbox CR lifecycle — pod template, PVC, env from secret/configmap |
-| `persona/SYSTEM.md` | Agent system prompt |
+| `app/agent.py` (`DEFAULT_SYSTEM_PROMPT`) | Embedded system prompt (or `SYSTEM_PROMPT_PATH`) |
 | `docs/configuration.md` | Full env var reference |
 
 ## Env Config Quickref
@@ -68,7 +67,7 @@ Full reference at [docs/configuration.md](docs/configuration.md).
 
 **Sandbox pod template:** `SANDBOX_NAMESPACE`, `SANDBOX_IMAGE`, `SANDBOX_SERVICE_ACCOUNT`, `SANDBOX_CPU_REQUEST`, `SANDBOX_MEM_REQUEST`, `SANDBOX_DEADLINE_SECONDS`, etc.
 
-**Agent:** `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `CLAUDE_PERMISSION_MODE`, `CLAUDE_MAX_TURNS`, `ALLOWED_TOOLS`, `SKILLS_DIR`, `MCP_SERVERS`, `SYSTEM_PROMPT_PATH`, `APPEND_SYSTEM_PROMPT`, `ANTHROPIC_PLUGIN_MARKETPLACES`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `CO_AUTHOR_NAME`, `GH_APP_ID`, `GH_PRIVATE_KEY`
+**Agent:** `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `CLAUDE_PERMISSION_MODE`, `CLAUDE_MAX_TURNS`, `ALLOWED_TOOLS`, `SKILLS_DIR`, `SETTING_SOURCES`, `SKILLS`, `PLUGINS`, `MCP_SERVERS`, `SYSTEM_PROMPT_PATH`, `APPEND_SYSTEM_PROMPT`, `ANTHROPIC_PLUGIN_MARKETPLACES`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `CO_AUTHOR_NAME`, `GH_APP_ID`, `GH_PRIVATE_KEY`
 
 **AnyRouter / custom LLM:** `ANTHROPIC_BASE_URL` + `ANYROUTER_API_KEY`
 
