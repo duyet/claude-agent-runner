@@ -234,7 +234,7 @@ class GitHubPoller:
                     log.debug(f"Stopping at issue {issue.number} (already processed)")
                     break
 
-                await self._process_new_issue(repo_full, issue)
+                await self._process_new_issue(repo_full, repo, issue)
                 processed_count += 1
 
                 # Safety limit to avoid processing too many issues at once
@@ -248,7 +248,7 @@ class GitHubPoller:
         except GithubException as e:
             log.error(f"GitHub API error fetching new issues: {e}")
 
-    async def _process_new_issue(self, repo_full: str, issue: PyGithubIssue) -> None:
+    async def _process_new_issue(self, repo_full: str, repo, issue: PyGithubIssue) -> None:
         """Process a new issue (all issues, not just labeled)."""
         number = issue.number
         key = f"issue:{repo_full}:{number}"
@@ -381,9 +381,10 @@ class GitHubPoller:
         try:
             # PyGithub stores rate limit info from the last response
             rate_limit = self.github.get_rate_limit()
-            if rate_limit and rate_limit.search:
-                self.remaining_requests = rate_limit.search.remaining
-                self.rate_limit_reset = rate_limit.search.reset.timestamp()
+            core = getattr(rate_limit, "core", None)
+            if core:
+                self.remaining_requests = core.remaining
+                self.rate_limit_reset = core.reset.timestamp()
                 log.debug(f"Rate limit: {self.remaining_requests} requests remaining, resets at {datetime.fromtimestamp(self.rate_limit_reset)}")
         except Exception as e:
             log.debug(f"Failed to get rate limit info: {e}")
