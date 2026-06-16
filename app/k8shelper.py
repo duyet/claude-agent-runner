@@ -69,6 +69,10 @@ def _pod_template(task: dict, task_b64: str) -> dict:
                     {"name": "TASK_JSON", "value": task_b64},
                     {"name": "HOME", "value": "/home/agent"},
                     {"name": "PYTHONUNBUFFERED", "value": "1"},
+                    # Agent pods use /tmp (emptyDir) for state — /data is only on the receiver pod
+                    {"name": "STATE_MODE", "value": "isolated"},
+                    {"name": "STATE_BACKEND", "value": "file"},
+                    {"name": "STATE_PATH", "value": "/tmp/state"},
                 ],
                 "securityContext": {
                     "allowPrivilegeEscalation": False,
