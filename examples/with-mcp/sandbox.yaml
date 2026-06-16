@@ -1,0 +1,169 @@
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: agent-with-mcp-servers
+  namespace: agent-sandbox-system
+spec:
+  serviceAccountName: agent-sandbox-sa
+  agent:
+    name: agent-runner
+    image: ghcr.io/duyet/agent-runner:latest
+  env:
+    - name: GITHUB_REPO
+      value: "owner/repo"
+    - name: LLM_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-llm-key
+          key: api-key
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-gh-token
+          key: token
+    - name: ALLOWED_USERS
+      value: "duyet"
+    # MCP Servers configuration
+    - name: MCP_ENABLED
+      value: "true"
+    - name: MCP_SERVERS_CONFIG
+      value: |
+        {
+          "filesystem": {
+            "command": "/usr/local/bin/mcp-server-filesystem",
+            "args": ["--directory", "/workspace"],
+            "env": {"WORKSPACE_DIR": "/workspace"}
+          },
+          "fetch": {
+            "command": "/usr/local/bin/mcp-server-fetch",
+            "args": ["--user-agent", "Agent-Runner/1.0"],
+            "env": {"MAX_CONTENT_SIZE": "10485760"}
+          },
+          "github": {
+            "command": "/usr/local/bin/mcp-server-github",
+            "args": [],
+            "env": {
+              "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+              "MAX_RESULTS": "100"
+            }
+          },
+          "database": {
+            "command": "/usr/local/bin/mcp-server-postgres",
+            "args": ["--connection-string", "${DATABASE_URL}"],
+            "env": {"QUERY_TIMEOUT": "30"}
+          },
+          "web": {
+            "command": "/usr/local/bin/mcp-server-puppeteer",
+            "args": ["--headless", "true"],
+            "env": {"BROWSER_TIMEOUT": "60"}
+          }
+        }
+    - name: SYSTEM_PROMPT
+      value: |
+        You are an advanced development agent with access to multiple MCP servers
+        for extended capabilities.
+
+        Available MCP Servers:
+        - filesystem: File system operations and navigation
+        - fetch: Web content fetching and conversion
+        - github: GitHub API integration for PRs, issues, and code
+        - database: Database query and analysis
+        - web: Web browser automation and scraping
+
+        MCP Capabilities:
+        - Enhanced file operations via filesystem MCP
+        - Web content extraction via fetch MCP
+        - Direct GitHub API access via github MCP
+        - Database querying via database MCP
+        - Web automation via web MCP
+
+        Workflow:
+        1. Use MCP servers to gather context and information
+        2. Analyze data from multiple MCP sources
+        3. Implement fixes using MCP-provided insights
+        4. Verify changes using MCP capabilities
+        5. Document and commit with MCP-generated reports
+
+        Example MCP Usage:
+        - Use github MCP to fetch PR details and related commits
+        - Use fetch MCP to retrieve documentation and examples
+        - Use filesystem MCP to navigate complex codebases
+        - Use database MCP to analyze data models
+        - Use web MCP to test web interfaces
+
+        Always leverage MCP servers for enhanced capabilities when available.
+  tasks:
+    - name: mcp-enhanced-fix
+      instruction: "Use MCP servers to analyze and fix"
+      branchPattern: "mcp/{{instruction}}"
+      createPR: true
+      useMCP: true
+      mcpServers:
+        - filesystem
+        - fetch
+        - github
+      runTests: true
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 3000m
+      memory: 4Gi
+  timeout:
+    duration: 60m
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: cache
+      emptyDir:
+        sizeLimit: 10Gi
+    - name: mcp-data
+      emptyDir:
+        sizeLimit: 5Gi
+  volumeMounts:
+    - name: mcp-data
+      mountPath: /tmp/mcp
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  # MCP server containers
+  sidecars:
+    - name: mcp-filesystem
+      image: ghcr.io/anthropics/mcp-server-filesystem:latest
+      command: ["/usr/local/bin/mcp-server-filesystem"]
+      args: ["--directory", "/workspace"]
+      env:
+        - name: WORKSPACE_DIR
+          value: "/workspace"
+      volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+
+    - name: mcp-fetch
+      image: ghcr.io/anthropics/mcp-server-fetch:latest
+      command: ["/usr/local/bin/mcp-server-fetch"]
+      args: ["--user-agent", "Agent-Runner/1.0"]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+
+    - name: mcp-github
+      image: ghcr.io/anthropics/mcp-server-github:latest
+      command: ["/usr/local/bin/mcp-server-github"]
+      env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: agent-runner-gh-token
+              key: token
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi

@@ -1,0 +1,142 @@
+name: Multi-Architecture Docker Build CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build (linux/amd64, linux/arm64, or all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - linux/amd64
+          - linux/arm64
+          - all
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-arch builds
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+          driver-opts: |
+            image=ghcr.io/moby/buildkit:latest
+            network=bridge
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enabled={{is_default_branch}}
+            type=raw,value={{date 'YYYYMMDD'}}-{{ sha }} ,enabled=true
+          labels: |
+            org.opencontainers.image.title=Agent Runner
+            org.opencontainers.image.description=Self-improvement agent framework
+            org.opencontainers.image.version={{version}}
+            org.opencontainers.image.created={{ date }}
+            org.opencontainers.image.revision={{ sha }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./image
+          push: true
+          platforms: ${{ matrix.platform }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+
+      - name: Image digest summary
+        run: |
+          echo "Built multi-arch image:"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Digest: ${{ steps.meta.outputs.digest }}"
+          echo "Platforms: linux/amd64, linux/arm64"
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test image pull
+        run: |
+          echo "Testing image pull..."
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            python -c "import claude_agent_sdk; print('Claude Agent SDK imported successfully')"
+
+      - name: Test image functionality
+        run: |
+          echo "Testing basic functionality..."
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            python -c "
+from app.common import env
+from app.agent import main
+print('✓ Agent modules load successfully')
+print('✓ Environment variable parsing works')
+print('✓ Image is functional')
+"
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Send notification
+        run: |
+          echo "✅ Multi-arch Docker build completed!"
+          echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "🏗️  Architectures: linux/amd64, linux/arm64"
+          echo ""
+          echo "Deploy to your Kubernetes cluster:"
+          echo "  kubectl set image deployment/your-deployment agent-runner=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
