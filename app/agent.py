@@ -38,12 +38,11 @@ def main() -> None:
     # Set git and token env for Claude SDK's GitHub tool
     os.environ["GH_TOKEN"] = token
     os.environ["GITHUB_TOKEN"] = token
-    os.environ["GIT_AUTHOR_NAME"] = env("GIT_AUTHOR_NAME", "duyetbot[bot]")
-    os.environ["GIT_AUTHOR_EMAIL"] = env("GIT_AUTHOR_EMAIL",
-                                         "1064078+duyetbot[bot]@users.noreply.github.com")
-    os.environ["GIT_COMMITTER_NAME"] = env("GIT_COMMITTER_NAME", "duyetbot[bot]")
-    os.environ["GIT_COMMITTER_EMAIL"] = env("GIT_COMMITTER_EMAIL",
-                                            "1064078+duyetbot[bot]@users.noreply.github.com")
+
+    os.environ["GIT_AUTHOR_NAME"] = env("GIT_AUTHOR_NAME", "agent")
+    os.environ["GIT_AUTHOR_EMAIL"] = env("GIT_AUTHOR_EMAIL", "agent@localhost")
+    os.environ["GIT_COMMITTER_NAME"] = env("GIT_COMMITTER_NAME", "agent")
+    os.environ["GIT_COMMITTER_EMAIL"] = env("GIT_COMMITTER_EMAIL", "agent@localhost")
 
     try:
         asyncio.run(run_agent_sdk(_prompt(task)))
@@ -58,11 +57,11 @@ async def run_agent_sdk(prompt: str):
     from claude_agent_sdk import ClaudeAgentOptions, query
 
     system_prompt_path = env("SYSTEM_PROMPT_PATH", "/opt/persona/SYSTEM.md")
-    allowed_tools = [
-        t.strip()
-        for t in env("ALLOWED_TOOLS", "Read,Write,Edit,Bash,Glob,Grep,GitHub").split(",")
-        if t.strip()
-    ]
+    allowed_tools_str = env(
+        "ALLOWED_TOOLS",
+        "Read,Write,Edit,Bash,Glob,Grep,GitHub,WebSearch,WebFetch",
+    )
+    allowed_tools = [t.strip() for t in allowed_tools_str.split(",") if t.strip()]
 
     opts = ClaudeAgentOptions(
         cwd=str(WORKDIR),
@@ -83,11 +82,17 @@ async def run_agent_sdk(prompt: str):
     if mcp_servers:
         opts.mcp_servers = json.loads(mcp_servers)
 
+    # AnyRouter / custom base URL support
+    # Set ANTHROPIC_BASE_URL to a custom endpoint (e.g. https://anyrouter.dev/api).
+    # The SDK appends /v1/messages, so the base URL must stop at /api.
+    # When ANTHROPIC_BASE_URL is set, the API key is read from ANTHROPIC_API_KEY
+    # (or ANYROUTER_API_KEY as fallback).
     base = env("ANTHROPIC_BASE_URL")
     if base:
         opts.env = {
             "ANTHROPIC_BASE_URL": base,
-            "ANTHROPIC_API_KEY": env("ANYROUTER_API_KEY", ""),
+            "ANTHROPIC_API_KEY": env("ANTHROPIC_API_KEY",
+                                     env("ANYROUTER_API_KEY", "")),
         }
 
     async for msg in query(prompt=prompt, options=opts):
@@ -97,7 +102,11 @@ async def run_agent_sdk(prompt: str):
 def _prompt(task: dict) -> str:
     inst = task.get("instruction", "").strip()
     extra = f"\n\nAdditional instruction from the requester: {inst}" if inst else ""
-    co_author = env("GIT_AUTHOR_NAME", "duyetbot[bot]")
+    co_author = env("CO_AUTHOR_NAME", "")
+    co_author_line = (
+        f"\n5. Commit your changes (co-authored with {co_author})."
+        if co_author else "\n5. Commit your changes."
+    )
     return f"""Fix GitHub issue/PR #{task['number']} in the cloned repo at the current working directory.
 
 Title: {task['title']}
@@ -109,7 +118,7 @@ Steps:
 1. Explore the codebase to understand the issue.
 2. Make minimal, correct changes.
 3. If tests exist, run them and verify they pass.
-4. Commit your changes (co-authored with {co_author}).
+4. Commit your changes.{co_author_line}
 5. Push to a new branch.
 6. Create a pull request using the GitHub tool."""
 
