@@ -1,13 +1,14 @@
 """GitHub poller for pull mode. Periodically checks repos for issues/PRs and creates Sandbox CRs."""
 import asyncio
-import json
 import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-import httpx
+from github import Github, GithubException
+from github.Issue import Issue as PyGithubIssue
+from github.PullRequest import PullRequest as PyGithubPR
 
 from . import k8shelper
 from .common import get_logger
@@ -19,10 +20,8 @@ log = get_logger("poller")
 ENABLED = os.environ.get("PULL_MODE_ENABLED", "false").lower() == "true"
 INTERVAL_MINUTES = int(os.environ.get("PULL_MODE_INTERVAL_MINUTES", "5"))
 REPOS = [r.strip() for r in os.environ.get("PULL_MODE_REPOS", "").split(",") if r.strip()]
-EVENT_TYPES = [e.strip().lower() for e in os.environ.get("PULL_MODE_EVENTS", "issues,issue_comments").split(",") if e.strip()]
+EVENT_TYPES = [e.strip().lower() for e in os.environ.get("PULL_MODE_EVENTS", "issues").split(",") if e.strip()]
 
-TRIGGER_PHRASE = os.environ.get("TRIGGER_PHRASE", "/fix").strip()
-ISSUE_LABEL = os.environ.get("ISSUE_LABEL", "").strip().lower()
 ALLOWED_USERS = {u.strip().lower() for u in os.environ.get("ALLOWED_USERS", "").split(",") if u.strip()}
 
 # GitHub API configuration
@@ -34,7 +33,7 @@ GH_TOKEN = os.environ.get("GH_TOKEN")
 @dataclass
 class ProcessedItem:
     """Track processed items to avoid duplicates."""
-    item_type: str  # "issue" or "issue_comment" or "pr"
+    item_type: str  # "issue" or "pr"
     repo_full: str
     number: int
     timestamp: float = field(default_factory=time.time)
@@ -46,14 +45,13 @@ class ProcessedItem:
 
 
 class GitHubPoller:
-    """Polls GitHub for issues/PRs and creates Sandbox CRs."""
+    """Polls GitHub for issues/PRs and creates Sandbox CRs using PyGithub."""
 
     def __init__(self):
         self._state_mgr: StateManager | None = None
         self.processed: dict[str, ProcessedItem] = {}
-        self.client: httpx.AsyncClient | None = None
-        self.installation_token: str | None = None
-        self.token_expires_at: float = 0
+        self.github: Github | None = None
+        self._github_token_expires_at: float = 0
 
     @property
     def state_mgr(self) -> StateManager:
@@ -77,6 +75,9 @@ class GitHubPoller:
         # Load previously processed items from state
         await self._load_processed()
 
+        # Initialize GitHub client
+        self._ensure_github_client()
+
         # Start polling loop
         while True:
             try:
@@ -99,116 +100,59 @@ class GitHubPoller:
 
     async def _poll_repo(self, repo_full: str) -> None:
         """Poll a single repo for events."""
-        await self._ensure_client()
+        if not self.github:
+            log.warning("GitHub client not initialized")
+            return
 
-        # Check issues with label (if configured)
-        if "issues" in EVENT_TYPES and ISSUE_LABEL:
-            await self._check_labeled_issues(repo_full)
+        try:
+            repo = self.github.get_repo(repo_full)
+        except GithubException as e:
+            log.error(f"Failed to get repo {repo_full}: {e}")
+            return
 
-        # Check issue comments with trigger phrase
-        if "issue_comments" in EVENT_TYPES:
-            await self._check_issue_comments(repo_full)
+        # Check for new issues
+        if "issues" in EVENT_TYPES:
+            await self._check_new_issues(repo_full, repo)
 
-        # Check pull requests (if configured)
+        # Check pull requests
         if "prs" in EVENT_TYPES:
-            await self._check_pull_requests(repo_full)
+            await self._check_pull_requests(repo_full, repo)
 
-    async def _check_labeled_issues(self, repo_full: str) -> None:
-        """Check for newly opened issues with the target label."""
-        await self._ensure_client()
-        if not self.client:
-            return
-
-        # Query for issues with the label, sorted by recently created
-        query = f'repo:{repo_full} is:issue is:open label:"{ISSUE_LABEL}"'
-        params = {
-            "q": query,
-            "sort": "created",
-            "order": "desc",
-            "per_page": 10,
-        }
-
+    async def _check_new_issues(self, repo_full: str, repo) -> None:
+        """Check for newly opened issues (all issues)."""
         try:
-            response = await self.client.get(
-                "https://api.github.com/search/issues",
-                params=params,
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-            data = response.json()
+            # Get open issues, sorted by recently created
+            issues = repo.get_issues(state="open", sort="created", direction="desc")
 
-            for item in data.get("items", []):
-                await self._process_labeled_issue(repo_full, item)
+            for issue in issues:
+                # Skip pull requests (they're handled separately)
+                if issue.pull_request is not None:
+                    continue
 
-        except httpx.HTTPError as e:
-            log.error(f"GitHub API error searching labeled issues: {e}")
+                await self._process_new_issue(repo_full, issue)
 
-    async def _check_issue_comments(self, repo_full: str) -> None:
-        """Check for recent issue comments with trigger phrase."""
-        await self._ensure_client()
-        if not self.client:
-            return
+        except GithubException as e:
+            log.error(f"GitHub API error fetching new issues: {e}")
 
-        owner, repo = repo_full.split("/", 1)
-
-        # Get recent comments (last 10)
-        params = {"sort": "created", "order": "desc", "per_page": 10}
-
-        try:
-            response = await self.client.get(
-                f"https://api.github.com/repos/{owner}/{repo}/issues/comments",
-                params=params,
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-
-            for comment in response.json():
-                await self._process_issue_comment(repo_full, comment)
-
-        except httpx.HTTPError as e:
-            log.error(f"GitHub API error fetching issue comments: {e}")
-
-    async def _check_pull_requests(self, repo_full: str) -> None:
-        """Check for recent pull requests."""
-        await self._ensure_client()
-        if not self.client:
-            return
-
-        owner, repo = repo_full.split("/", 1)
-
-        # Get open PRs
-        params = {"state": "open", "sort": "created", "order": "desc", "per_page": 10}
-
-        try:
-            response = await self.client.get(
-                f"https://api.github.com/repos/{owner}/{repo}/pulls",
-                params=params,
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-
-            for pr in response.json():
-                await self._process_pull_request(repo_full, pr)
-
-        except httpx.HTTPError as e:
-            log.error(f"GitHub API error fetching PRs: {e}")
-
-    async def _process_labeled_issue(self, repo_full: str, issue: dict) -> None:
-        """Process an issue with the target label."""
-        number = issue.get("number")
+    async def _process_new_issue(self, repo_full: str, issue: -> None:
+        """Process a new issue (all issues, not just labeled)."""
+        number = issue.number
         key = f"issue:{repo_full}:{number}"
 
-        # Skip if already processed
+        # Skip if already processed recently (within 1 hour)
         if key in self.processed:
-            return
+            processed = self.processed[key]
+            if time.time() - processed.timestamp < 3600:
+                log.debug(f"Skipping recently processed issue {number}")
+                return
 
         # Check if user is allowed
-        sender = (issue.get("user") or {}).get("login", "")
+        sender = issue.user.login if issue.user else ""
         if ALLOWED_USERS and not self._is_allowed(sender):
             log.debug(f"Skipping issue {number} by disallowed user {sender}")
             return
 
-        log.info(f"Found labeled issue: {repo_full}#{number}")
+        log.info(f"Found new issue: {repo_full}#{number} by {sender} - {issue.title[:50]}")
 
         # Create task
         ts = int(time.time())
@@ -216,119 +160,56 @@ class GitHubPoller:
         task = {
             "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
             "repo_full": repo_full,
-            "clone_url": issue.get("repository", {}).get("clone_url", ""),
-            "default_branch": issue.get("repository", {}).get("default_branch", "main"),
+            "clone_url": repo.clone_url,
+            "default_branch": repo.default_branch,
             "number": number,
-            "title": issue.get("title", ""),
-            "body": issue.get("body", "") or "",
+            "title": issue.title,
+            "body": issue.body or "",
             "instruction": "",
             "sender": sender,
             "is_pr": False,
-            "reason": f"issue opened with label '{ISSUE_LABEL}'",
+            "reason": f"new issue opened by {sender}",
         }
 
         # Create Sandbox CR
         try:
             sandbox_name = k8shelper.create_sandbox(task)
             self.processed[key] = ProcessedItem("issue", repo_full, number, time.time(), sandbox_name)
-            log.info(f"Created sandbox {sandbox_name} for labeled issue {number}")
+            log.info(f"Created sandbox {sandbox_name} for new issue {number}")
         except Exception as e:
             log.error(f"Failed to create sandbox for issue {number}: {e}")
 
-    async def _process_issue_comment(self, repo_full: str, comment: dict) -> None:
-        """Process an issue comment for trigger phrase."""
-        # Get issue number from comment
-        issue_url = comment.get("issue_url", "")
-        if not issue_url:
-            return
-
-        # Extract issue number from URL (format: .../repos/{owner}/{repo}/issues/{number})
-        parts = issue_url.split("/")
+    async def _check_pull_requests(self, repo_full: str, repo) -> None:
+        """Check for recent pull requests."""
         try:
-            number = int(parts[-1])
-        except (ValueError, IndexError):
-            return
+            # Get open PRs, sorted by recently created
+            prs = repo.get_pulls(state="open", sort="created", direction="desc")
 
-        key = f"issue_comment:{repo_full}:{number}"
+            for pr in prs:
+                await self._process_pull_request(repo_full, pr)
+
+        except GithubException as e:
+            log.error(f"GitHub API error fetching PRs: {e}")
+
+    async def _process_pull_request(self, repo_full: str, pr: PyGithubPR) -> None:
+        """Process a pull request."""
+        number = pr.number
+        key = f"pr:{repo_full}:{number}"
 
         # Skip if already processed recently (within 1 hour)
         if key in self.processed:
             processed = self.processed[key]
             if time.time() - processed.timestamp < 3600:
+                log.debug(f"Skipping recently processed PR {number}")
                 return
 
-        # Check for trigger phrase
-        body = comment.get("body", "").strip()
-        if not body.lower().startswith(TRIGGER_PHRASE.lower()):
-            return
-
         # Check if user is allowed
-        sender = (comment.get("user") or {}).get("login", "")
-        if ALLOWED_USERS and not self._is_allowed(sender):
-            log.debug(f"Skipping comment by disallowed user {sender}")
-            return
-
-        log.info(f"Found trigger comment: {repo_full}#{number} by {sender}")
-
-        # Fetch full issue details
-        await self._ensure_client()
-        if not self.client:
-            return
-
-        owner, repo = repo_full.split("/", 1)
-
-        try:
-            response = await self.client.get(
-                f"https://api.github.com/repos/{owner}/{repo}/issues/{number}",
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-            issue = response.json()
-        except httpx.HTTPError as e:
-            log.error(f"Failed to fetch issue {number}: {e}")
-            return
-
-        # Create task
-        ts = int(time.time())
-        safe = "".join(c.lower() if c.isalnum() else "-" for c in repo_full).strip("-")
-        task = {
-            "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
-            "repo_full": repo_full,
-            "clone_url": issue.get("repository", {}).get("clone_url", ""),
-            "default_branch": issue.get("repository", {}).get("default_branch", "main"),
-            "number": number,
-            "title": issue.get("title", ""),
-            "body": issue.get("body", "") or "",
-            "instruction": body[len(TRIGGER_PHRASE):].strip(),
-            "sender": sender,
-            "is_pr": "pull_request" in issue,
-            "reason": f"{TRIGGER_PHRASE} by {sender}",
-        }
-
-        # Create Sandbox CR
-        try:
-            sandbox_name = k8shelper.create_sandbox(task)
-            self.processed[key] = ProcessedItem("issue_comment", repo_full, number, time.time(), sandbox_name)
-            log.info(f"Created sandbox {sandbox_name} for issue comment {number}")
-        except Exception as e:
-            log.error(f"Failed to create sandbox for issue comment {number}: {e}")
-
-    async def _process_pull_request(self, repo_full: str, pr: dict) -> None:
-        """Process a pull request."""
-        number = pr.get("number")
-        key = f"pr:{repo_full}:{number}"
-
-        # Skip if already processed
-        if key in self.processed:
-            return
-
-        # Check if user is allowed
-        sender = (pr.get("user") or {}).get("login", "")
+        sender = pr.user.login if pr.user else ""
         if ALLOWED_USERS and not self._is_allowed(sender):
             log.debug(f"Skipping PR {number} by disallowed user {sender}")
             return
 
-        log.info(f"Found PR: {repo_full}#{number}")
+        log.info(f"Found new PR: {repo_full}#{number} by {sender} - {pr.title[:50]}")
 
         # Create task
         ts = int(time.time())
@@ -336,11 +217,11 @@ class GitHubPoller:
         task = {
             "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
             "repo_full": repo_full,
-            "clone_url": pr.get("repository", {}).get("clone_url", ""),
-            "default_branch": pr.get("repository", {}).get("default_branch", "main"),
+            "clone_url": pr.base.repo.clone_url,
+            "default_branch": pr.base.repo.default_branch,
             "number": number,
-            "title": pr.get("title", ""),
-            "body": pr.get("body", "") or "",
+            "title": pr.title,
+            "body": pr.body or "",
             "instruction": "",
             "sender": sender,
             "is_pr": True,
@@ -362,81 +243,47 @@ class GitHubPoller:
         base = sender.lower().removesuffix("[bot]")
         return sender.lower() in ALLOWED_USERS or base in ALLOWED_USERS
 
-    async def _ensure_client(self) -> None:
-        """Ensure HTTP client is initialized with valid auth."""
-        if self.client is None:
-            self.client = httpx.AsyncClient(timeout=30.0)
-
-        # Check if we need to refresh the installation token
-        if GH_APP_ID and GH_PRIVATE_KEY and (not self.installation_token or time.time() >= self.token_expires_at):
-            await self._refresh_installation_token()
-
-    async def _refresh_installation_token(self) -> None:
-        """Refresh GitHub App installation token."""
-        import jwt
-
-        # Generate JWT
-        now = int(time.time())
-        payload = {
-            "iat": now - 60,
-            "exp": now + 600,
-            "iss": int(GH_APP_ID),
-        }
-        jwt_token = jwt.encode(payload, GH_PRIVATE_KEY, algorithm="RS256")
-
-        if not self.client:
+    def _ensure_github_client(self) -> None:
+        """Ensure GitHub client is initialized with valid authentication."""
+        if self.github is not None:
             return
 
-        try:
-            # Get installation ID
-            response = await self.client.get(
-                "https://api.github.com/app/installations",
-                headers={
-                    "Authorization": f"Bearer {jwt_token}",
-                    "Accept": "application/vnd.github.v3+json",
-                },
-            )
-            response.raise_for_status()
-            installations = response.json()
+        # Use GitHub App authentication if available
+        if GH_APP_ID and GH_PRIVATE_KEY:
+            try:
+                from github import GithubIntegration
+                import jwt
 
-            if not installations:
-                log.error("No GitHub App installations found")
-                return
+                # Generate JWT for GitHub App
+                now = int(time.time())
+                payload = {
+                    "iat": now - 60,
+                    "exp": now + 600,
+                    "iss": int(GH_APP_ID),
+                }
+                jwt_token = jwt.encode(payload, GH_PRIVATE_KEY, algorithm="RS256")
 
-            installation_id = installations[0]["id"]
+                # Get installation token
+                integration = GithubIntegration(jwt_token, GH_PRIVATE_KEY)
+                installations = integration.get_installations()
+                if installations:
+                    installation_id = installations[0].id
+                    token = integration.get_access_token(installation_id)
+                    self.github = Github(token.token)
+                    log.info("Initialized GitHub client with App authentication")
+                    return
+            except Exception as e:
+                log.error(f"Failed to initialize GitHub App authentication: {e}")
 
-            # Get installation token
-            response = await self.client.post(
-                f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-                headers={
-                    "Authorization": f"Bearer {jwt_token}",
-                    "Accept": "application/vnd.github.v3+json",
-                },
-            )
-            response.raise_for_status()
-            token_data = response.json()
+        # Fall back to personal access token
+        if GH_TOKEN:
+            self.github = Github(GH_TOKEN)
+            log.info("Initialized GitHub client with personal access token")
+            return
 
-            self.installation_token = token_data["token"]
-            # Token expires in 1 hour, refresh 5 minutes early
-            self.token_expires_at = time.time() + 3600 - 300
-            log.info("Refreshed GitHub App installation token")
-
-        except (httpx.HTTPError, KeyError) as e:
-            log.error(f"Failed to refresh installation token: {e}")
-
-    def _headers(self) -> dict[str, str]:
-        """Get headers for GitHub API requests."""
-        headers = {
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "claude-agent-runner/1.0",
-        }
-
-        if self.installation_token:
-            headers["Authorization"] = f"token {self.installation_token}"
-        elif GH_TOKEN:
-            headers["Authorization"] = f"token {GH_TOKEN}"
-
-        return headers
+        # No authentication - will have limited rate limits
+        self.github = Github()
+        log.warning("Initialized GitHub client without authentication (limited rate limits)")
 
     async def _load_processed(self) -> None:
         """Load processed items from state manager."""
@@ -445,21 +292,19 @@ class GitHubPoller:
             for run in runs:
                 # Reconstruct ProcessedItem from AgentRun
                 if run.task_id:
-                    # Extract item type, repo, number from task_id
-                    # task_id format: "fix-repo-name-123-timestamp"
-                    parts = run.task_id.split("-")
-                    if len(parts) >= 3:
-                        # Try to parse number
-                        try:
-                            number = int(parts[-2]) if len(parts) >= 2 else 0
-                            # Reconstruct repo from task name
+                    try:
+                        parts = run.task_id.split("-")
+                        if len(parts) >= 3:
+                            number = int(parts[-2]) if parts[-2].isdigit() else 0
                             repo_full = run.trigger_context.get("repo_full", "")
                             item_type = run.trigger_context.get("trigger_type", "issue")
 
                             key = f"{item_type}:{repo_full}:{number}"
-                            self.processed[key] = ProcessedItem(item_type, repo_full, number, run.created_at, run.sandbox_name)
-                        except (ValueError, IndexError):
-                            pass
+                            self.processed[key] = ProcessedItem(
+                                item_type, repo_full, number, run.created_at, run.sandbox_name
+                            )
+                    except (ValueError, IndexError):
+                        pass
 
             log.info(f"Loaded {len(self.processed)} processed items from state")
 
