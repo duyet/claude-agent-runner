@@ -6,26 +6,31 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 ```mermaid
 flowchart LR
-    T["🔵 External<br/>GitHub / Custom Webhook"]
-    R["🔵 Receiver<br/>Verify → Allowlist → Create CR"]
-    CR["🟡 Sandbox CR<br/>PodSpec + PVC + Env"]
-    O["🔵 Operator<br/>Watch → Spawn Pod"]
-    A["🟠 Agent Pod<br/>Clone → SDK → Commit/PR"]
+    T["🌐 External<br/>GitHub / Custom Webhook"]
+    R["⚙️ Receiver<br/>Verify → Allowlist → Create CR"]
+    CR["📋 Sandbox CR<br/>PodSpec + PVC + Env"]
+    A["🤖 Agent Pod<br/>Clone → SDK → Commit/PR"]
     SELF["🗑️ Self-delete CR"]
+
+    subgraph OP["🔵 agent-sandbox-operator"]
+        direction TB
+        style OP fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
+        W["👁️ Watches Sandbox CR"]
+        SP["🚀 Spawns Pod from spec"]
+    end
 
     T -->|webhook| R
     R -->|1. create| CR
-    CR -.->|2. watch| O
-    O -->|3. spawn| A
+    CR -.->|2. watch| W
+    SP -->|3. spawn| A
     A -->|4. done| SELF
-    SELF -.->|5. cleanup| O
+    SELF -.->|5. cleanup| W
 
-    style T fill:#1a3a2a,stroke:#4caf50
-    style R fill:#16213e,stroke:#0f3460
-    style CR fill:#1a1a2e,stroke:#e94560
-    style O fill:#16213e,stroke:#0f3460
-    style A fill:#3d1a1a,stroke:#e94560
-    style SELF fill:#2a1a1a,stroke:#888
+    style T fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
+    style R fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
+    style CR fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
+    style A fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
+    style SELF fill:#1e1e1e,stroke:#d4a574,stroke-width:2px,color:#e8e6e3
 ```
 
 **Lifecycle:** 🔵 long-lived · 🟡 per-task CR · 🟠 ephemeral pod · Steps numbered 1–5.
