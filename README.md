@@ -145,11 +145,11 @@ Set `GH_APP_ID` and `GH_PRIVATE_KEY` in the sandbox Secret.
 ## Development
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (requires uv: https://docs.astral.sh/uv/)
+uv sync
 
 # Run receiver locally
-uvicorn app.receiver:app --reload --port 8080
+uv run uvicorn app.receiver:app --reload --port 8080
 
 # Test health
 curl http://localhost:8080/healthz

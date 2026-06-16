@@ -22,7 +22,8 @@ app/
 persona/
   SYSTEM.md         # Agent system prompt — controls behavior
 Dockerfile          # Single image, two entrypoints: receiver (default) or agent
-requirements.txt    # Python deps
+pyproject.toml       # Project metadata + dependencies
+uv.lock              # Locked dependency versions
 .github/
   workflows/
     build-push.yml    # Docker multi-arch CI → ghcr.io
