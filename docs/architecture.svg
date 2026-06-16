@@ -16,121 +16,121 @@
   <text x="600" y="35" text-anchor="middle" class="s" fill="#141413" font-size="16px" font-weight="500">Architecture Components</text>
 
   <!-- Row 1, Column 1: Receiver Pod -->
-  <rect x="50" y="70" width="280" height="200" rx="8" fill="#e8e6dc" stroke="#141413" stroke-width="1"/>
-  <text x="190" y="100" text-anchor="middle" class="m" fill="#141413">⚙️ Receiver Pod</text>
-  <text x="190" y="120" text-anchor="middle" class="s" fill="#b0aea5">FastAPI webhook</text>
+  <rect x="20" y="70" width="360" height="200" rx="8" fill="#e8e6dc" stroke="#141413" stroke-width="1"/>
+  <text x="200" y="100" text-anchor="middle" class="m" fill="#141413">⚙️ Receiver Pod</text>
+  <text x="200" y="120" text-anchor="middle" class="s" fill="#b0aea5">FastAPI webhook</text>
 
-  <rect x="70" y="140" width="240" height="30" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-  <text x="190" y="160" text-anchor="middle" class="m" fill="#b0aea5">🌐 Webhook endpoints</text>
+  <rect x="40" y="140" width="320" height="30" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+  <text x="200" y="160" text-anchor="middle" class="m" fill="#b0aea5">🌐 Webhook endpoints</text>
 
-  <rect x="70" y="180" width="240" height="25" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-  <text x="190" y="197" text-anchor="middle" class="s" fill="#b0aea5">Kubernetes API client</text>
+  <rect x="40" y="180" width="320" height="25" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+  <text x="200" y="197" text-anchor="middle" class="s" fill="#b0aea5">Kubernetes API client</text>
 
-  <rect x="70" y="215" width="240" height="25" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-  <text x="190" y="232" text-anchor="middle" class="s" fill="#b0aea5" font-size="10px">Verifies HMAC + creates CR</text>
+  <rect x="40" y="215" width="320" height="25" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+  <text x="200" y="232" text-anchor="middle" class="s" fill="#b0aea5" font-size="10px">Verifies HMAC + creates CR</text>
 
   <!-- Arrow: Receiver -> CR -->
-  <line x1="330" y1="160" x2="390" y2="160" class="arrow" marker-end="url(#arrow)"/>
-  <text x="360" y="150" text-anchor="middle" class="s" fill="#b0aea5" font-size="9px">creates</text>
+  <line x1="380" y1="160" x2="440" y2="160" class="arrow" marker-end="url(#arrow)"/>
+  <text x="410" y="150" text-anchor="middle" class="s" fill="#b0aea5" font-size="9px">creates</text>
 
   <!-- Row 1, Column 2: Sandbox Custom Resource -->
-  <rect x="390" y="70" width="280" height="200" rx="8" fill="#6a9bcc" stroke="#141413" stroke-width="1"/>
-  <text x="530" y="100" text-anchor="middle" class="m" fill="#FAF9F5">📋 Sandbox Custom Resource</text>
-  <text x="530" y="120" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">agents.x-k8s.io/v1alpha1</text>
-  <text x="530" y="135" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">resource: sandboxes</text>
+  <rect x="440" y="70" width="320" height="200" rx="8" fill="#6a9bcc" stroke="#141413" stroke-width="1"/>
+  <text x="600" y="100" text-anchor="middle" class="m" fill="#FAF9F5">📋 Sandbox Custom Resource</text>
+  <text x="600" y="120" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">agents.x-k8s.io/v1alpha1</text>
+  <text x="600" y="135" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">resource: sandboxes</text>
 
-  <rect x="410" y="155" width="240" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-  <text x="530" y="172" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">spec: task, repo, image, deadline</text>
+  <rect x="460" y="155" width="280" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+  <text x="600" y="172" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">spec: task, repo, image, deadline</text>
 
-  <rect x="410" y="190" width="240" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-  <text x="530" y="207" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">status: pending/running/done</text>
+  <rect x="460" y="190" width="280" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+  <text x="600" y="207" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">status: pending/running/done</text>
 
-  <rect x="410" y="225" width="240" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-  <text x="530" y="242" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">Stored in etcd via CRD</text>
+  <rect x="460" y="225" width="280" height="25" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+  <text x="600" y="242" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">Stored in etcd via CRD</text>
 
   <!-- Arrow: CR -> Pod -->
-  <line x1="670" y1="170" x2="730" y2="170" class="arrow" marker-end="url(#arrow)"/>
-  <text x="700" y="160" text-anchor="middle" class="s" fill="#b0aea5" font-size="9px">watch → spawns</text>
+  <line x1="760" y1="170" x2="820" y2="170" class="arrow" marker-end="url(#arrow)"/>
+  <text x="790" y="160" text-anchor="middle" class="s" fill="#b0aea5" font-size="9px">watch → spawns</text>
 
   <!-- Row 1, Column 3: Pod -->
   <g>
-    <rect x="730" y="70" width="300" height="400" rx="8" fill="#D97757" stroke="#141413" stroke-width="1"/>
-    <text x="880" y="100" text-anchor="middle" class="m" fill="#FAF9F5">🤖 Pod (Claude Agent SDK)</text>
+    <rect x="820" y="70" width="360" height="400" rx="8" fill="#D97757" stroke="#141413" stroke-width="1"/>
+    <text x="1000" y="100" text-anchor="middle" class="m" fill="#FAF9F5">🤖 Pod (Claude Agent SDK)</text>
 
     <!-- Core Components -->
-    <rect x="750" y="130" width="260" height="100" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-    <text x="880" y="155" text-anchor="middle" class="s" fill="#141413">Core Components</text>
+    <rect x="840" y="130" width="320" height="100" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+    <text x="1000" y="155" text-anchor="middle" class="s" fill="#141413">Core Components</text>
 
-    <rect x="770" y="170" width="70" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-    <text x="805" y="195" text-anchor="middle" class="m" fill="#b0aea5">Claude</text>
+    <rect x="860" y="170" width="90" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+    <text x="905" y="195" text-anchor="middle" class="m" fill="#b0aea5">Claude</text>
 
-    <rect x="860" y="170" width="70" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-    <text x="895" y="195" text-anchor="middle" class="m" fill="#b0aea5">State</text>
+    <rect x="970" y="170" width="90" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+    <text x="1015" y="195" text-anchor="middle" class="m" fill="#b0aea5">State</text>
 
-    <rect x="950" y="170" width="50" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
-    <text x="975" y="195" text-anchor="middle" class="m" fill="#b0aea5">Git</text>
+    <rect x="1080" y="170" width="70" height="40" rx="8" fill="#F0EEE6" stroke="#b0aea5" stroke-width="1"/>
+    <text x="1115" y="195" text-anchor="middle" class="m" fill="#b0aea5">Git</text>
 
     <!-- Tools List -->
-    <rect x="750" y="250" width="260" height="80" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-    <text x="880" y="275" text-anchor="middle" class="s" fill="#141413">Agent Tools</text>
-    <text x="770" y="295" class="s" fill="#b0aea5" font-size="11px">Read • Write • Edit • Bash</text>
-    <text x="770" y="310" class="s" fill="#b0aea5" font-size="11px">GitHub • WebSearch • WebFetch</text>
+    <rect x="840" y="250" width="320" height="80" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+    <text x="1000" y="275" text-anchor="middle" class="s" fill="#141413">Agent Tools</text>
+    <text x="860" y="295" class="s" fill="#b0aea5" font-size="11px">Read • Write • Edit • Bash</text>
+    <text x="860" y="310" class="s" fill="#b0aea5" font-size="11px">GitHub • WebSearch • WebFetch</text>
 
     <!-- Git Operations -->
-    <rect x="750" y="345" width="260" height="60" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-    <text x="880" y="370" text-anchor="middle" class="s" fill="#141413">Git Operations</text>
+    <rect x="840" y="345" width="320" height="60" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+    <text x="1000" y="370" text-anchor="middle" class="s" fill="#141413">Git Operations</text>
 
-    <rect x="770" y="385" width="60" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
-    <text x="800" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Commit</text>
+    <rect x="860" y="385" width="70" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
+    <text x="895" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Commit</text>
 
-    <rect x="840" y="385" width="50" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
-    <text x="865" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Push</text>
+    <rect x="940" y="385" width="60" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
+    <text x="970" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Push</text>
 
-    <rect x="900" y="385" width="70" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
-    <text x="935" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Create PR</text>
+    <rect x="1010" y="385" width="90" height="15" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
+    <text x="1055" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Create PR</text>
   </g>
 
   <!-- Row 2, Column 1: K8s API -->
-  <rect x="50" y="290" width="280" height="150" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
-  <text x="190" y="320" text-anchor="middle" class="m" fill="#FAF9F5">☸️ Kubernetes API</text>
+  <rect x="20" y="290" width="360" height="150" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
+  <text x="200" y="320" text-anchor="middle" class="m" fill="#FAF9F5">☸️ Kubernetes API</text>
 
-  <rect x="70" y="340" width="240" height="25" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-  <text x="190" y="357" text-anchor="middle" class="s" fill="#788C5D" font-size="10px">API server + etcd storage</text>
+  <rect x="40" y="340" width="320" height="25" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+  <text x="200" y="357" text-anchor="middle" class="s" fill="#788C5D" font-size="10px">API server + etcd storage</text>
 
-  <rect x="70" y="375" width="240" height="25" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-  <text x="190" y="392" text-anchor="middle" class="s" fill="#788C5D" font-size="10px">CRD: agents.x-k8s.io</text>
+  <rect x="40" y="375" width="320" height="25" rx="8" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+  <text x="200" y="392" text-anchor="middle" class="s" fill="#788C5D" font-size="10px">CRD: agents.x-k8s.io</text>
 
-  <rect x="70" y="410" width="240" height="20" rx="8" fill="#e8e6dc" stroke="#141413" stroke-width="1"/>
-  <text x="190" y="424" text-anchor="middle" class="s" fill="#141413" font-size="10px">Controller watches → spawns</text>
+  <rect x="40" y="410" width="320" height="20" rx="8" fill="#e8e6dc" stroke="#141413" stroke-width="1"/>
+  <text x="200" y="424" text-anchor="middle" class="s" fill="#141413" font-size="10px">Controller watches → spawns</text>
 
   <!-- Arrow: Receiver -> K8s API -->
-  <line x1="190" y1="270" x2="190" y2="290" class="arrow" marker-end="url(#arrow)"/>
-  <text x="220" y="282" text-anchor="middle" class="s" fill="#b0aea5" font-size="8px">POST</text>
+  <line x1="200" y1="270" x2="200" y2="290" class="arrow" marker-end="url(#arrow)"/>
+  <text x="230" y="282" text-anchor="middle" class="s" fill="#b0aea5" font-size="8px">POST</text>
 
   <!-- Row 2, Column 3: PVC (under Pod) -->
   <g>
-    <rect x="730" y="485" width="300" height="80" rx="8" fill="#6a9bcc" stroke="#141413" stroke-width="1"/>
-    <text x="880" y="505" text-anchor="middle" class="m" fill="#FAF9F5">💾 PVC Storage (volume mount)</text>
+    <rect x="820" y="485" width="360" height="80" rx="8" fill="#6a9bcc" stroke="#141413" stroke-width="1"/>
+    <text x="1000" y="505" text-anchor="middle" class="m" fill="#FAF9F5">💾 PVC Storage (volume mount)</text>
 
-    <rect x="750" y="520" width="120" height="15" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-    <text x="810" y="532" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">Workspace</text>
+    <rect x="840" y="520" width="150" height="15" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+    <text x="915" y="532" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">Workspace</text>
 
-    <rect x="890" y="520" width="120" height="15" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
-    <text x="950" y="532" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">State data</text>
+    <rect x="1010" y="520" width="150" height="15" rx="6" fill="#FAF9F5" stroke="#141413" stroke-width="1"/>
+    <text x="1085" y="532" text-anchor="middle" class="s" fill="#6a9bcc" font-size="10px">State data</text>
   </g>
 
   <!-- Arrow: Pod -> PVC -->
-  <line x1="880" y1="470" x2="880" y2="485" class="arrow" marker-end="url(#arrow)"/>
-  <text x="910" y="480" text-anchor="middle" class="s" fill="#b0aea5" font-size="8px">mounts</text>
+  <line x1="1000" y1="470" x2="1000" y2="485" class="arrow" marker-end="url(#arrow)"/>
+  <text x="1030" y="480" text-anchor="middle" class="s" fill="#b0aea5" font-size="8px">mounts</text>
 
   <!-- Controller note -->
-  <rect x="390" y="320" width="280" height="80" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
-  <text x="530" y="345" text-anchor="middle" class="m" fill="#FAF9F5">Agent Sandbox Controller</text>
-  <text x="530" y="365" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">Watches CR events</text>
-  <text x="530" y="385" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">Creates/Deletes pods</text>
+  <rect x="440" y="320" width="320" height="80" rx="8" fill="#788C5D" stroke="#141413" stroke-width="1"/>
+  <text x="600" y="345" text-anchor="middle" class="m" fill="#FAF9F5">Agent Sandbox Controller</text>
+  <text x="600" y="365" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">Watches CR events</text>
+  <text x="600" y="385" text-anchor="middle" class="s" fill="#E3DACC" font-size="10px">Creates/Deletes pods</text>
 
   <!-- Arrows connecting Controller -->
-  <line x1="530" y1="270" x2="530" y2="320" class="arrow" marker-end="url(#arrow)"/>
-  <line x1="670" y1="360" x2="730" y2="360" class="arrow" marker-end="url(#arrow)"/>
+  <line x1="600" y1="270" x2="600" y2="320" class="arrow" marker-end="url(#arrow)"/>
+  <line x1="760" y1="360" x2="820" y2="360" class="arrow" marker-end="url(#arrow)"/>
 
 </svg>
