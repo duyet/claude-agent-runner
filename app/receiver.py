@@ -43,11 +43,13 @@ def _allowed(sender: str) -> bool:
     return sender.lower() in ALLOWED or base in ALLOWED
 
 
+@app.get("/api/v1/healthz")
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
 
 
+@app.post("/api/v1/webhook/github")
 @app.post("/webhook/github")
 async def github(request: Request):
     """GitHub webhook endpoint. Verifies HMAC-SHA256, handles issue_comment /fix."""
@@ -88,6 +90,7 @@ async def github(request: Request):
     )
 
 
+@app.post("/api/v1/webhook/custom")
 @app.post("/webhook/custom")
 async def custom(request: Request):
     """Custom webhook endpoint. Verifies API key, accepts arbitrary task payload.
