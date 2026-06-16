@@ -22,7 +22,7 @@ One Docker image, two entrypoints:
 
 ```bash
 # Build
-docker build -t ghcr.io/duyetbot/claude-agent-runner:latest .
+docker build -t ghcr.io/duyet/claude-agent-runner:latest .
 
 # Deploy to Kubernetes
 helm upgrade --install agent-runner ./charts/agent-runner \
