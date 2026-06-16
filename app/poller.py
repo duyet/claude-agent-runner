@@ -214,7 +214,7 @@ class GitHubPoller:
             if since_time:
                 # Only fetch issues created after our last poll
                 cutoff = since_time + timedelta(seconds=-60)  # 1 minute buffer to avoid missing edge cases
-                kwargs["since"] = cutoff.isoformat()
+                kwargs["since"] = cutoff  # PyGithub expects datetime, not ISO string
                 log.debug(f"Fetching issues created since {cutoff.isoformat()}")
             else:
                 log.debug("Fetching all open issues (first poll)")
@@ -296,14 +296,16 @@ class GitHubPoller:
         try:
             kwargs = {"state": "open", "sort": "created", "direction": "desc"}
 
-            if since_time:
-                cutoff = since_time + timedelta(seconds=-60)
-                kwargs["since"] = cutoff.isoformat()
-
+            cutoff = since_time + timedelta(seconds=-60) if since_time else None
+            # get_pulls() has no `since` param — filter by created_at manually
             prs = repo.get_pulls(**kwargs)
 
             processed_count = 0
             for pr in prs:
+                # Stop if PR was created before our cutoff
+                if cutoff and pr.created_at.replace(tzinfo=None) < cutoff:
+                    break
+
                 # Stop if we've seen this PR before
                 key = f"pr:{repo_full}:{pr.number}"
                 if self.processed.get(key):
