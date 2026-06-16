@@ -49,11 +49,18 @@ class GitHubPoller:
     """Polls GitHub for issues/PRs and creates Sandbox CRs."""
 
     def __init__(self):
-        self.state_mgr = StateManager()
+        self._state_mgr: StateManager | None = None
         self.processed: dict[str, ProcessedItem] = {}
         self.client: httpx.AsyncClient | None = None
         self.installation_token: str | None = None
         self.token_expires_at: float = 0
+
+    @property
+    def state_mgr(self) -> StateManager:
+        """Lazy initialization of StateManager."""
+        if self._state_mgr is None:
+            self._state_mgr = StateManager()
+        return self._state_mgr
 
     async def start(self) -> None:
         """Start the poller background task."""
