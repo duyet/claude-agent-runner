@@ -194,14 +194,14 @@ Each layer can extend or override the previous layer, allowing for flexible runt
 
 ## Components
 
-### 1. Receiver Service (`image/app/receiver.py`)
+### 1. Receiver Service (`app/receiver.py`)
 - FastAPI-based webhook receiver
 - Supports multiple webhook formats
 - Security verification (HMAC, API keys)
 - Event routing and validation
 - Kubernetes CRD creation
 
-### 2. Agent Runner (`image/app/agent.py`)
+### 2. Agent Runner (`app/agent.py`)
 - Executes inside Sandbox pods
 - Claude Agent SDK integration
 - Git operations (clone, commit, push, PR)
