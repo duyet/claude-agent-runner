@@ -397,19 +397,12 @@ class GitHubPoller:
         if GH_APP_ID and GH_PRIVATE_KEY:
             try:
                 from github import GithubIntegration
-                import jwt
 
-                # Generate JWT for GitHub App
-                now = int(time.time())
-                payload = {
-                    "iat": now - 60,
-                    "exp": now + 600,
-                    "iss": str(GH_APP_ID),
-                }
-                jwt_token = jwt.encode(payload, GH_PRIVATE_KEY, algorithm="RS256")
-
-                # Get installation token
-                integration = GithubIntegration(jwt_token, GH_PRIVATE_KEY)
+                # GithubIntegration handles JWT creation internally (iss as int)
+                integration = GithubIntegration(
+                    integration_id=int(GH_APP_ID),
+                    private_key=GH_PRIVATE_KEY,
+                )
                 installations = integration.get_installations()
                 if installations:
                     installation_id = installations[0].id
