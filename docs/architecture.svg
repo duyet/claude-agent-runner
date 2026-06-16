@@ -85,7 +85,7 @@
   <text x="175" y="317" text-anchor="middle" class="s" fill="#788C5D">API server + CRD storage</text>
 
   <rect x="70" y="335" width="100" height="25" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1"/>
-  <text x="120" y="352" text-anchor="middle" class="s" fill="#141413">🔵 Operator</text>
+  <text x="120" y="352" text-anchor="middle" class="s" fill="#141413">🔵 Sandbox Op</text>
 
   <!-- External Triggers -->
   <rect x="700" y="280" width="250" height="80" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1"/>
