@@ -35,13 +35,15 @@ def main() -> None:
         k8shelper.delete_sandbox(task["sandbox_name"])
         sys.exit(1)
 
-    # Set token for Claude SDK's GitHub tool
+    # Set git and token env for Claude SDK's GitHub tool
     os.environ["GH_TOKEN"] = token
     os.environ["GITHUB_TOKEN"] = token
-    os.environ["GIT_AUTHOR_NAME"] = "duyetbot[bot]"
-    os.environ["GIT_AUTHOR_EMAIL"] = "1064078+duyetbot[bot]@users.noreply.github.com"
-    os.environ["GIT_COMMITTER_NAME"] = "duyetbot[bot]"
-    os.environ["GIT_COMMITTER_EMAIL"] = "1064078+duyetbot[bot]@users.noreply.github.com"
+    os.environ["GIT_AUTHOR_NAME"] = env("GIT_AUTHOR_NAME", "duyetbot[bot]")
+    os.environ["GIT_AUTHOR_EMAIL"] = env("GIT_AUTHOR_EMAIL",
+                                         "1064078+duyetbot[bot]@users.noreply.github.com")
+    os.environ["GIT_COMMITTER_NAME"] = env("GIT_COMMITTER_NAME", "duyetbot[bot]")
+    os.environ["GIT_COMMITTER_EMAIL"] = env("GIT_COMMITTER_EMAIL",
+                                            "1064078+duyetbot[bot]@users.noreply.github.com")
 
     try:
         asyncio.run(run_agent_sdk(_prompt(task)))
@@ -55,17 +57,38 @@ def main() -> None:
 async def run_agent_sdk(prompt: str):
     from claude_agent_sdk import ClaudeAgentOptions, query
 
+    system_prompt_path = env("SYSTEM_PROMPT_PATH", "/opt/persona/SYSTEM.md")
+    allowed_tools = [
+        t.strip()
+        for t in env("ALLOWED_TOOLS", "Read,Write,Edit,Bash,Glob,Grep,GitHub").split(",")
+        if t.strip()
+    ]
+
     opts = ClaudeAgentOptions(
         cwd=str(WORKDIR),
-        system_prompt=Path("/opt/persona/SYSTEM.md").read_text(),
+        system_prompt=Path(system_prompt_path).read_text(),
         permission_mode=env("CLAUDE_PERMISSION_MODE", "bypassPermissions"),
-        allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "GitHub"],
+        allowed_tools=allowed_tools,
         model=env("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"),
         max_turns=int(env("CLAUDE_MAX_TURNS", "50")),
     )
+
+    # Optional skills preload — comma-separated paths to skill directories
+    skills_dir = env("SKILLS_DIR")
+    if skills_dir:
+        opts.skills_dir = [d.strip() for d in skills_dir.split(",") if d.strip()]
+
+    # Optional MCP server config — JSON string
+    mcp_servers = env("MCP_SERVERS")
+    if mcp_servers:
+        opts.mcp_servers = json.loads(mcp_servers)
+
     base = env("ANTHROPIC_BASE_URL")
     if base:
-        opts.env = {"ANTHROPIC_BASE_URL": base, "ANTHROPIC_API_KEY": env("ANYROUTER_API_KEY", "")}
+        opts.env = {
+            "ANTHROPIC_BASE_URL": base,
+            "ANTHROPIC_API_KEY": env("ANYROUTER_API_KEY", ""),
+        }
 
     async for msg in query(prompt=prompt, options=opts):
         log.info("agent -> %s", type(msg).__name__)
@@ -74,6 +97,7 @@ async def run_agent_sdk(prompt: str):
 def _prompt(task: dict) -> str:
     inst = task.get("instruction", "").strip()
     extra = f"\n\nAdditional instruction from the requester: {inst}" if inst else ""
+    co_author = env("GIT_AUTHOR_NAME", "duyetbot[bot]")
     return f"""Fix GitHub issue/PR #{task['number']} in the cloned repo at the current working directory.
 
 Title: {task['title']}
@@ -85,7 +109,7 @@ Steps:
 1. Explore the codebase to understand the issue.
 2. Make minimal, correct changes.
 3. If tests exist, run them and verify they pass.
-4. Commit your changes (co-authored with duyetbot[bot]).
+4. Commit your changes (co-authored with {co_author}).
 5. Push to a new branch.
 6. Create a pull request using the GitHub tool."""
 
