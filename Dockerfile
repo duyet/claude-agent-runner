@@ -1,4 +1,4 @@
-# agent-runner — webhook receiver + Claude Agent SDK sandbox agent (one image, two entrypoints)
+# claude-agent-runner — webhook receiver + Claude Agent SDK sandbox agent (one image, two entrypoints)
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

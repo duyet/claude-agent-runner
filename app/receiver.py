@@ -11,11 +11,11 @@ from . import k8shelper
 from .common import get_logger
 
 log = get_logger("receiver")
-app = FastAPI(title="agent-runner webhook receiver")
+app = FastAPI(title="claude-agent-runner webhook receiver")
 
 WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
 API_KEY = os.environ.get("API_KEY", "")
-ALLOWED = {u.strip().lower() for u in os.environ.get("ALLOWED_USERS", "duyet").split(",") if u.strip()}
+ALLOWED = {u.strip().lower() for u in os.environ.get("ALLOWED_USERS", "").split(",") if u.strip()}
 TRIGGER = os.environ.get("TRIGGER_PHRASE", "/fix").strip()
 
 
@@ -36,6 +36,8 @@ def _verify_api_key(request: Request) -> bool:
 
 
 def _allowed(sender: str) -> bool:
+    if not ALLOWED:
+        return True
     base = sender.lower().removesuffix("[bot]")
     return sender.lower() in ALLOWED or base in ALLOWED
 
