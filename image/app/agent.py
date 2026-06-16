@@ -145,9 +145,9 @@ Keep changes focused. Do not reformat unrelated code."""
 
 
 def _commit_msg(task: dict) -> str:
-    co1 = env("CO_AUTHOR_1", "duyetbot <bot@duyet.net>")
-    co2 = env("CO_AUTHOR_2", "minhagent <hi@minhagent.dev>")
-    co3 = env("CO_AUTHOR_3", "Claude <noreply@anthropic.com>")
+    co1 = env("CO_AUTHOR_1", "duyet <duyet@duyet.net>")
+    co2 = env("CO_AUTHOR_2", "duyetbot <bot@duyet.net>")
+    co3 = env("CO_AUTHOR_3", "claude <claude@anthropic.com>")
     return (
         f"fix(agent): address #{task['number']} {task['title'][:60]}\n\n"
         f"Via agent-runner (Claude Agent SDK).\n\n"
@@ -160,9 +160,9 @@ def _commit_msg(task: dict) -> str:
 def _create_pr(task: dict, token: str, branch: str):
     import httpx
     owner, repo = task["repo_full"].split("/")
-    co1 = env("CO_AUTHOR_1", "duyetbot").split("<")[0].strip()
-    co2 = env("CO_AUTHOR_2", "minhagent").split("<")[0].strip()
-    co3 = env("CO_AUTHOR_3", "Claude").split("<")[0].strip()
+    co1 = env("CO_AUTHOR_1", "duyet").split("<")[0].strip()
+    co2 = env("CO_AUTHOR_2", "duyetbot").split("<")[0].strip()
+    co3 = env("CO_AUTHOR_3", "claude").split("<")[0].strip()
     body = {
         "title": f"fix(agent): {task['title'][:60]}",
         "head": branch,
