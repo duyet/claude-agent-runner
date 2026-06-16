@@ -1,0 +1,160 @@
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: mcp-server-development
+  namespace: agent-sandbox-system
+spec:
+  serviceAccountName: agent-sandbox-sa
+  agent:
+    name: agent-runner
+    image: ghcr.io/duyet/agent-runner:latest
+  env:
+    - name: GITHUB_REPO
+      value: "owner/mcp-server"
+    - name: LLM_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-llm-key
+          key: api-key
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-gh-token
+          key: token
+    - name: ALLOWED_USERS
+      value: "duyet"
+    # MCP Server Development Configuration
+    - name: MCP_ENABLED
+      value: "true"
+    - name: MCP_SERVER_MODE
+      value: "development"
+    - name: MCP_SERVER_TYPE
+      value: "custom"
+    - name: MCP_SERVER_COMMAND
+      value: "/usr/local/bin/my-mcp-server"
+    - name: MCP_SERVER_ARGS
+      value: "--dev --debug --port=3000"
+    - name: DEVELOPMENT_MODE
+      value: "true"
+    - name: SYSTEM_PROMPT
+      value: |
+        You are an MCP Server Development Agent specialized in creating,
+        testing, and debugging Model Context Protocol servers.
+
+        MCP Server Development Workflow:
+        1. Analyze the MCP server requirements and protocol specification
+        2. Implement the server following MCP standards
+        3. Add comprehensive error handling and validation
+        4. Implement all required MCP tools and resources
+        5. Add proper logging and debugging support
+        6. Create unit tests for all functionality
+        7. Test against MCP client implementations
+        8. Generate documentation and examples
+        9. Create PR with detailed implementation notes
+
+        MCP Server Requirements:
+        - Implement tools, resources, and prompts as per MCP spec
+        - Handle JSON-RPC communication correctly
+        - Provide proper error responses
+        - Support initialization and lifecycle management
+        - Include authentication if required
+        - Add comprehensive logging
+
+        Available Tools:
+        - Read, Write, Edit: Code implementation
+        - Bash: Build and test execution
+        - Grep, Glob: Code navigation and analysis
+        - HTTP: API testing
+        - Git, GitHub: Version control
+
+        Development Tasks:
+        - Create new MCP server implementations
+        - Fix bugs in existing servers
+        - Add new tools/resources to servers
+        - Optimize performance
+        - Update documentation
+        - Create examples and tutorials
+
+        Always ensure:
+        - MCP protocol compliance
+        - Comprehensive error handling
+        - Detailed logging
+        - Full test coverage
+        - Clear documentation
+  tasks:
+    - name: develop-mcp-server
+      instruction: "Develop or fix MCP server"
+      branchPattern: "mcp-dev/{{instruction}}"
+      createPR: true
+      runTests: true
+      buildAndTest: true
+      generateDocs: true
+      prLabels:
+        - "mcp-server"
+        - "development"
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 2Gi
+    limits:
+      cpu: 4000m
+      memory: 6Gi
+  timeout:
+    duration: 90m
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: cache
+      emptyDir:
+        sizeLimit: 15Gi
+    - name: build-artifacts
+      emptyDir:
+        sizeLimit: 5Gi
+    - name: test-results
+      emptyDir:
+        sizeLimit: 2Gi
+  volumeMounts:
+    - name: build-artifacts
+      mountPath: /tmp/build
+    - name: test-results
+      mountPath: /tmp/tests
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  # MCP server development environment
+  sidecars:
+    - name: mcp-test-client
+      image: ghcr.io/anthropics/mcp-test-client:latest
+      command: ["/bin/sh"]
+      args: ["-c", "sleep infinity"]
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+
+    - name: inspector
+      image: ghcr.io/anthropics/mcp-inspector:latest
+      command: ["/bin/sh"]
+      args: ["-c", "sleep infinity"]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+
+  # Development environment variables
+  devEnvironment:
+    enabled: true
+    tooling:
+      - name: "python"
+        version: "3.12"
+      - name: "node"
+        version: "20"
+      - name: "go"
+        version: "1.21"
+    packageManagers:
+      - "pip"
+      - "npm"
+      - "go"
+    debugEnabled: true
+    verboseLogging: true

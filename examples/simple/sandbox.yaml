@@ -1,0 +1,56 @@
+apiVersion: agents.x-k8s.io/v1beta1
+kind: Sandbox
+metadata:
+  name: simple-code-fix
+  namespace: agent-sandbox-system
+spec:
+  serviceAccountName: agent-sandbox-sa
+  agent:
+    name: agent-runner
+    image: ghcr.io/duyet/agent-runner:latest
+  env:
+    - name: GITHUB_REPO
+      value: "owner/repo"
+    - name: LLM_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-llm-key
+          key: api-key
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: agent-runner-gh-token
+          key: token
+    - name: ALLOWED_USERS
+      value: "duyet"
+    - name: SYSTEM_PROMPT
+      value: |
+        You are a code fixing agent. Your role is to:
+        1. Analyze the issue or PR request
+        2. Identify the root cause
+        3. Implement a fix
+        4. Add tests if needed
+        5. Commit and push changes
+        6. Create a PR with description
+
+        Always be thorough and test your changes.
+  tasks:
+    - name: fix-issue
+      instruction: "Fix the reported issue"
+      branchPattern: "fix/issue-{{number}}"
+      createPR: true
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  timeout:
+    duration: 30m
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: cache
+      emptyDir:
+        sizeLimit: 5Gi

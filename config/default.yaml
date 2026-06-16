@@ -1,0 +1,285 @@
+# Agent Runner Default Configuration
+# This file contains all configurable options for the agent-runner service
+
+# ==============================================================================
+# Service Configuration
+# ==============================================================================
+service:
+  # Service name and namespace
+  name: agent-runner
+  namespace: agent-runner
+
+  # Image configuration
+  image:
+    repository: ghcr.io/duyet/agent-runner
+    tag: "v0.1.0"
+    pullPolicy: IfNotPresent
+
+  # Replica count
+  replicas: 1
+
+# ==============================================================================
+# Webhook Configuration
+# ==============================================================================
+webhook:
+  # GitHub webhook settings
+  github:
+    enabled: true
+    path: /api/v1/webhook/github
+
+  # GitLab webhook settings
+  gitlab:
+    enabled: false
+    path: /api/v1/webhook/gitlab
+
+  # Custom webhook settings
+  custom:
+    enabled: true
+    path: /api/v1/webhook/custom
+
+  # Manual trigger UI
+  ui:
+    enabled: true
+    path: /api/v1/trigger
+    # Simple form-based trigger
+    # Fields: event_type, content, payload
+    auth_required: true
+
+# ==============================================================================
+# Security Configuration
+# ==============================================================================
+security:
+  # GitHub webhook secret (HMAC verification)
+  github_webhook_secret: ""
+
+  # GitLab webhook secret
+  gitlab_webhook_secret: ""
+
+  # Custom API key for manual triggers
+  custom_api_key: ""
+
+  # Allowed users (GitHub usernames, GitLab usernames)
+  allowed_users: "admin,duyet,duyetbot"
+
+  # Trigger phrase for issue/PR comments
+  trigger_phrase: "/fix"
+
+  # Issue label for auto-triggering
+  issue_label: "agent"
+
+# ==============================================================================
+# Agent Configuration
+# ==============================================================================
+agent:
+  # Claude Agent SDK settings
+  model: "anthropic/claude-sonnet-4.6"
+  max_turns: 30
+  timeout: 1200  # seconds (20 minutes)
+
+  # Permission mode
+  permission_mode: "bypassPermissions"  # or "auto", "default"
+
+  # Allowed tools (comma-separated)
+  tools: "Read,Write,Edit,Bash,Glob,Grep,GitHub"
+
+  # Enable skills
+  skills_enabled: true
+
+  # Enable MCP servers
+  mcp_enabled: false
+  mcp_servers: {}
+
+# ==============================================================================
+# Sandbox Configuration
+# ==============================================================================
+sandbox:
+  # Sandbox namespace
+  namespace: agent-runner
+
+  # Sandbox image (same as service image by default)
+  image:
+    repository: ghcr.io/duyet/agent-runner
+    tag: "v0.1.0"
+    pullPolicy: IfNotPresent
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  # Storage
+  storage:
+    size: "2Gi"
+    storage_class: "local-path"
+
+  # Security context
+  security:
+    run_as_non_root: true
+    run_as_user: 1000
+    run_as_group: 1000
+    read_only_root_filesystem: true
+    allow_privilege_escalation: false
+
+  # Lifecycle
+  deadline_seconds: 1200  # 20 minutes
+  self_delete: true
+
+# ==============================================================================
+# Git Configuration
+# ==============================================================================
+git:
+  # Default branch name
+  default_branch: "main"
+
+  # Git configuration
+  user_name: "agent-runner"
+  user_email: "agent-runner@example.com"
+
+  # Commit message format
+  commit_message_template: |
+    fix(agent): address #{number} {title}
+
+    Via agent-runner (Claude Agent SDK).
+
+    Co-Authored-By: {co_author_1}
+    Co-Authored-By: {co_author_2}
+
+# ==============================================================================
+# Co-Author Configuration
+# ==============================================================================
+co_authors:
+  co_author_1: "duyetbot <bot@duyet.net>"
+  co_author_2: "minhagent <hi@minhagent.dev>"
+  co_author_3: "Claude <noreply@anthropic.com>"
+
+# ==============================================================================
+# LLM Configuration
+# ==============================================================================
+llm:
+  # LLM provider (anthropic, openai, custom)
+  provider: "anthropic"
+
+  # Base URL for custom provider
+  base_url: ""
+
+  # API key (usually from secret)
+  api_key: ""
+
+  # Default models
+  default_model: "anthropic/claude-sonnet-4.6"
+  haiku_model: "anthropic/claude-haiku-4.5"
+  sonnet_model: "anthropic/claude-sonnet-4.6"
+  opus_model: "anthropic/claude-opus-4.6"
+
+  # Timeout
+  timeout_ms: 300000
+
+# ==============================================================================
+# GitHub Integration
+# ==============================================================================
+github:
+  # GitHub App credentials
+  app_id: ""
+  private_key: ""
+  installation_token_ttl: 3600  # seconds (1 hour)
+
+  # Supported events
+  supported_events:
+    - issue_comment
+    - issues
+    - pull_request
+    - pull_request_review
+    - push
+    - release
+    - fork
+    - watch
+    - create
+    - delete
+
+# ==============================================================================
+# GitLab Integration
+# ==============================================================================
+gitlab:
+  # GitLab personal access token
+  access_token: ""
+
+  # GitLab webhook token
+  webhook_token: ""
+
+  # Supported events
+  supported_events:
+    - IssueComment
+    - Issue
+    - MergeRequest
+    - Push
+    - Release
+
+# ==============================================================================
+# Ingress Configuration
+# ==============================================================================
+ingress:
+  enabled: true
+  class_name: "traefik"
+
+  # TLS configuration
+  tls:
+    enabled: true
+    issuer: "letsencrypt-prod"
+
+  # Hosts
+  hosts:
+    - agent-runner.example.com
+    - github.webhook.example.com
+
+  # Paths
+  paths:
+    - path: /api/v1/webhook
+      type: Prefix
+    - path: /healthz
+      type: Exact
+
+# ==============================================================================
+# Monitoring Configuration
+# ==============================================================================
+monitoring:
+  # Health check
+  health:
+    enabled: true
+    path: /healthz
+
+  # Metrics (Prometheus)
+  metrics:
+    enabled: false
+    port: 9090
+
+  # Logging
+  logging:
+    level: "INFO"
+    format: "json"
+
+# ==============================================================================
+# Advanced Configuration
+# ==============================================================================
+advanced:
+  # Kubernetes resource limits
+  service_account:
+    create: true
+    name: "agent-runner"
+
+  # RBAC
+  rbac:
+    create: true
+
+  # ConfigMap
+  config_map:
+    create: true
+
+  # Secret
+  secret:
+    create: true
+    # If false, you must provide existing secret name
+    existing_secret_name: ""
