@@ -24,19 +24,44 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 ### Flow Diagram
 
-<img src="docs/flow.svg" alt="Flow Diagram" width="100%"/>
+```mermaid
+sequenceDiagram
+    participant GH as 📝 GitHub
+    participant RP as ∞ Receiver Pod
+    participant K8s as ☸️ K8s API
+    participant OP as 👁️ Operator
+    participant AG as ⏱️ Pod
+
+    Note right of RP: Long-running
+    Note right of OP: Long-running
+    Note right of AG: Ephemeral
+
+    GH->>RP: webhook (/fix comment)
+    RP->>RP: verify HMAC
+    RP->>K8s: create Sandbox CR
+    K8s->>OP: watch event
+    OP->>AG: spawn pod
+    
+    AG->>AG: clone repo
+    AG->>AG: run SDK
+    AG->>AG: track state
+    AG->>AG: git ops
+
+    AG->>K8s: delete Sandbox CR
+    Note right of AG: ✅ Done
+```
 
 **Lifecycle Phases:**
 
-**① Trigger** — GitHub issue with `/fix` comment or custom webhook API call
+**① Trigger** — GitHub issue with `/fix` comment sends webhook
 
-**② Receiver** — FastAPI service verifies HMAC/API key and calls Kubernetes API to create Sandbox CR
+**② Receiver** — Long-running FastAPI pod verifies HMAC and calls Kubernetes API to create Sandbox CR
 
-**③ Operator** — `agent-sandbox-operator` controller watches for Sandbox CRs and spawns agent pods (standalone, not in main flow)
+**③ Operator** — Agent Sandbox Operator watches for CRs and spawns agent pods
 
-**④ Agent Execution** — Agent pod runs: Clone repository → Claude Agent SDK → State tracking → Git operations → Self-delete
+**④ Agent Execution** — Ephemeral pod runs: Clone repository → Claude Agent SDK → State tracking → Git operations → Self-delete
 
-**⑤ Cleanup** — Agent deletes its own Sandbox CR, operator removes pod
+**⑤ Cleanup** — Agent deletes its own Sandbox CR when complete
 
 One Docker image, two entrypoints:
 - **Receiver** (default): FastAPI webhook (long-running deployment)
