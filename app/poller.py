@@ -404,7 +404,7 @@ class GitHubPoller:
                 payload = {
                     "iat": now - 60,
                     "exp": now + 600,
-                    "iss": int(GH_APP_ID),
+                    "iss": str(GH_APP_ID),
                 }
                 jwt_token = jwt.encode(payload, GH_PRIVATE_KEY, algorithm="RS256")
 
@@ -433,7 +433,7 @@ class GitHubPoller:
     async def _load_processed(self) -> None:
         """Load processed items from state manager."""
         try:
-            runs = await self.state_mgr.list_runs(limit=1000)
+            runs = self.state_mgr.list_runs(limit=1000)
             for run in runs:
                 # Reconstruct ProcessedItem from AgentRun
                 if run.task_id:
