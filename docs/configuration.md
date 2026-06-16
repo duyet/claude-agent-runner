@@ -28,6 +28,7 @@ All configuration is through environment variables. No YAML config files, no har
 |---|---|---|
 | `SANDBOX_CONTAINER_NAME` | `agent` | Container name inside pod |
 | `SANDBOX_CONTAINER_COMMAND` | `python -m app.agent` | Container entrypoint |
+| `SANDBOX_CONTAINER_ARGS` | — | Additional CLI args for the entrypoint (space-separated, e.g. `--model claude-sonnet-4-6 --max-turns 10`) |
 | `SANDBOX_CONTAINER_WORKDIR` | `/workspace` | Working directory |
 | `SANDBOX_SERVICE_ACCOUNT` | `claude-agent-runner` | K8s service account |
 | `SANDBOX_RUN_AS_USER` | `1000` | Container UID |
@@ -62,6 +63,11 @@ All configuration is through environment variables. No YAML config files, no har
 
 ## Agent (sandbox pod)
 
+The runner automatically forwards all env vars with the following prefixes to the SDK
+subprocess: `ANTHROPIC_*`, `CLAUDE_*`, `ANYROUTER_*`, `GIT_*`, `GH_*`, `SKILLS_*`, `MCP_*`.
+No code changes needed when new env vars are added — just set them in the Secret or ConfigMap
+and they flow through to the SDK at runtime.
+
 ### Authentication
 
 The Agent SDK reads authentication from the pod's environment. Set these via Secret/ConfigMap:
@@ -69,6 +75,7 @@ The Agent SDK reads authentication from the pod's environment. Set these via Sec
 | Variable | Description |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key (direct API or subscription) |
+| `ANTHROPIC_PLUGIN_MARKETPLACES` | Comma-separated plugin marketplace IDs to enable |
 | `ANYROUTER_API_KEY` | API key for AnyRouter (used when ANTHROPIC_BASE_URL is set) |
 
 For cloud provider auth, set the corresponding env vars in the pod (SDK auto-detects):
@@ -88,6 +95,7 @@ For cloud provider auth, set the corresponding env vars in the pod (SDK auto-det
 | `ANTHROPIC_BASE_URL` | — | Custom base URL (e.g. `https://anyrouter.dev/api`). SDK appends `/v1/messages` |
 | `CLAUDE_PERMISSION_MODE` | `bypassPermissions` | Permission mode: bypassPermissions, dontAsk, acceptEdits, default |
 | `CLAUDE_MAX_TURNS` | `50` | Max conversation turns |
+| `APPEND_SYSTEM_PROMPT` | — | Extra text appended to the system prompt (also settable via `--append-system-prompt` CLI arg) |
 
 ### Tools
 
@@ -127,3 +135,15 @@ Available tools: Read, Write, Edit, Bash, Glob, Grep, Git, GitHub, WebSearch, We
 | Variable | Description |
 |---|---|
 | `TASK_JSON` | Base64-encoded task payload (injected by receiver) |
+
+## CLI Arguments
+
+The agent container also accepts CLI args that override their corresponding env vars:
+
+| Arg | Overrides | Example |
+|-----|-----------|---------|
+| `--model` | `ANTHROPIC_MODEL` | `--model claude-sonnet-4-6` |
+| `--max-turns` | `CLAUDE_MAX_TURNS` | `--max-turns 10` |
+| `--append-system-prompt` | `APPEND_SYSTEM_PROMPT` | `--append-system-prompt "Follow our coding standards"` |
+
+Pass these via `SANDBOX_CONTAINER_ARGS` environment variable or by customizing `SANDBOX_CONTAINER_COMMAND`.
