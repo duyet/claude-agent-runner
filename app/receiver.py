@@ -1,4 +1,5 @@
 """Webhook receiver. Verifies HMAC or API key, extracts triggers, creates Sandbox CR."""
+import asyncio
 import hashlib
 import hmac
 import json
@@ -9,9 +10,16 @@ from fastapi import FastAPI, HTTPException, Request, Response
 
 from . import k8shelper
 from .common import get_logger
+from .poller import start_poller
 
 log = get_logger("receiver")
 app = FastAPI(title="claude-agent-runner webhook receiver")
+
+# Startup event: start poller if enabled
+@app.on_event("startup")
+async def startup():
+    """Start background poller if pull mode is enabled."""
+    await start_poller()
 
 WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
 API_KEY = os.environ.get("API_KEY", "")

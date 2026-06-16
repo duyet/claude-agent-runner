@@ -170,11 +170,11 @@ MCP_SERVERS: '{"playwright": {"command": "npx", "args": ["@playwright/mcp@latest
 
 ## Webhook Endpoints
 
-### `POST /webhook/github`
+### `POST /api/v1/webhook/github` (also `/webhook/github` for backward compatibility)
 
 GitHub webhook receiver. Verifies HMAC-SHA256, handles `issue_comment` with trigger phrase (default: `/fix`). Creates a Sandbox CR for matching comments.
 
-### `POST /webhook/custom`
+### `POST /api/v1/webhook/custom` (also `/webhook/custom`)
 
 Generic webhook receiver. Verifies API key (`X-API-Key` header or `api_key` query param). Accepts:
 
@@ -188,9 +188,74 @@ Generic webhook receiver. Verifies API key (`X-API-Key` header or `api_key` quer
 }
 ```
 
-### `GET /healthz`
+### `GET /api/v1/healthz` (also `/healthz`)
 
 Health check — returns `{"ok": true}`.
+
+## Pull Mode (for homelab without public endpoint)
+
+When deployed in a homelab without a public endpoint, GitHub webhooks cannot reach the receiver. In this case, enable **pull mode** to periodically poll the GitHub API instead.
+
+### Configuration
+
+Enable pull mode with environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PULL_MODE_ENABLED` | `false` | Enable GitHub API polling mode |
+| `PULL_MODE_INTERVAL_MINUTES` | `5` | Polling interval in minutes |
+| `PULL_MODE_REPOS` | `""` | Comma-separated repos to poll (e.g., `duyet/infra,duyet/charts`) |
+| `PULL_MODE_EVENTS` | `issues,issue_comments` | Event types: `issues`, `issue_comments`, `prs` |
+
+### How Pull Mode Works
+
+1. **Polls GitHub API** every N minutes for configured repos
+2. **Issues with label**: Finds issues with the configured `ISSUE_LABEL`
+3. **Issue comments**: Searches recent comments for `TRIGGER_PHRASE` (e.g., `/fix`)
+4. **Pull requests**: Polls open PRs (if `prs` in `PULL_MODE_EVENTS`)
+5. **Deduplication**: Tracks processed items to avoid duplicate Sandbox CRs
+6. **State persistence**: Uses `STATE_BACKEND` to remember processed items across restarts
+
+### Example Configuration
+
+```yaml
+# ConfigMap
+PULL_MODE_ENABLED: "true"
+PULL_MODE_INTERVAL_MINUTES: "3"
+PULL_MODE_REPOS: "duyet/infra"
+PULL_MODE_EVENTS: "issues,issue_comments"
+TRIGGER_PHRASE: "/fix"
+ISSUE_LABEL: "agent"
+ALLOWED_USERS: "duyet,duyetbot"
+
+# Secret (GitHub App authentication - recommended)
+GH_APP_ID: "4027770"
+GH_PRIVATE_KEY: |
+  -----BEGIN RSA PRIVATE KEY-----
+  ...
+  -----END RSA PRIVATE KEY-----
+```
+
+### Authentication
+
+Pull mode supports the same authentication methods as webhook mode:
+
+- **GitHub App** (recommended): Fine-grained, automatic token refresh
+- **Personal Access Token**: Simpler but requires manual rotation
+
+The poller automatically refreshes GitHub App installation tokens before they expire.
+
+### State Management
+
+Pull mode relies on `STATE_BACKEND` to track processed items:
+
+- **none** (default): In-memory only, resets on restart
+- **file**: Local file storage in `STATE_PATH`
+- **postgres** / **redis**: External storage for multi-pod deployments
+
+Use `shared` mode with a PVC for persistent state across pod restarts.
+
+
 
 ## Sandbox Pod Spec
 
