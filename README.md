@@ -6,46 +6,80 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 ```mermaid
 flowchart TD
-    subgraph Triggers["Trigger Sources"]
+    subgraph Triggers["🔵 Trigger Sources (external)"]
         GH["GitHub Webhook<br/>issue_comment / tag / label"]
         CUSTOM["Custom Webhook<br/>REST API"]
         SCHEDULE["Scheduler<br/>periodic crawl"]
     end
 
-    subgraph Receiver["Receiver (FastAPI)"]
-        VERIFY["Verify Auth<br/>HMAC or API Key"]
-        ALLOWED["Check Allowlist<br/>users / labels / tags"]
-        CREATE["Create Sandbox CR<br/>per task"]
+    subgraph Receiver["🔵 Receiver (long-lived Deployment)"]
+        direction TB
+        V["Verify Auth<br/>HMAC or API Key"]
+        A["Allowlist Check<br/>users / labels / tags"]
+        C["Create Sandbox CR<br/>agents.x-k8s.io/v1alpha1"]
+        V --> A --> C
     end
 
-    subgraph Sandbox["Sandbox Pod (ephemeral)"]
-        CLONE["Clone repo"]
-        RUN["Run Claude Agent SDK<br/>headless mode"]
-        COMMIT["Commit & Push"]
-        PR["Create Pull Request"]
-        DELETE["Self-delete Sandbox CR"]
+    subgraph CRD["🟡 Sandbox CR (per-task resource)"]
+        direction TB
+        S["spec.podTemplate → full PodSpec<br/>(securityContext, resources, volumes,<br/>command, envFrom Secret+ConfigMap)"]
+        VCT["spec.volumeClaimTemplates<br/>→ ephemeral PVC (workspace)"]
+        ANNO["metadata.annotations<br/>→ repo / issue / reason"]
+        S --- VCT --- ANNO
     end
 
-    subgraph Config["Configuration Controls"]
-        MODE["Trigger Mode<br/>(/fix comment / label / tag)"]
-        ALLOW["Allowlist<br/>(users / labels / tags)"]
-        PROMPT["System Prompt<br/>+ per-task instruction"]
+    subgraph Operator["🔵 agent-sandbox Operator (long-lived)"]
+        direction TB
+        W["Watches Sandbox CR<br/>create/update/delete"]
+        SP["Spawns ephemeral pod<br/>from spec.podTemplate"]
+        CL["CR deleted → cleans up pod"]
+        W --> SP --> CL
     end
 
-    Triggers -->|webhook payload| Receiver
-    Config -->|settings| Receiver
-    Receiver -->|create| Sandbox
-    Sandbox -.->|done| DELETE
+    subgraph Agent["🟠 Sandbox Pod — Agent (ephemeral, one-shot)"]
+        direction TB
+        GIT["1. Clone repo (depth 50)"]
+        SDK["2. Claude Agent SDK headless"]
+        subgraph SDK_Scope["SDK Capabilities"]
+            TOOLS["Tools: Read, Write, Edit, Bash,<br/>Glob, Grep, Git, GitHub,<br/>WebSearch, WebFetch, Monitor, Agent"]
+            SKILLS["Skills: auto-discovered<br/>from .claude/skills/"]
+            PLUGINS["Plugins: SKILLS_DIR, PLUGINS<br/>env directories"]
+            MCP["MCP Servers: JSON config<br/>(e.g. Playwright)"]
+        end
+        OUT["3. Commit & Push → Create PR"]
+        DEL["4. Self-delete Sandbox CR"]
+        GIT --> SDK
+        SDK --- SDK_Scope
+        SDK --> OUT --> DEL
+    end
 
-    style Sandbox fill:#1a1a2e,stroke:#e94560
+    subgraph Config["🔵 Configuration (persistent)"]
+        M["Trigger Mode<br/>(comment / label / tag)"]
+        AL["Allowlist"]
+        P["System Prompt"]
+    end
+
+    Triggers -->|webhook| Receiver
+    Config -.->|env vars| Receiver
+    Config -.->|envFrom Secret+ConfigMap| Agent
+    Receiver -->|1. create| CRD
+    CRD -.->|2. watch| Operator
+    Operator -->|3. spawn pod| Agent
+    Agent -->|4. self-delete| CRD
+    CRD -.->|5. operator cleans up| Operator
+
+    style CRD fill:#1a1a2e,stroke:#e94560
+    style Operator fill:#16213e,stroke:#0f3460
+    style Agent fill:#3d1a1a,stroke:#e94560
     style Receiver fill:#16213e,stroke:#0f3460
-    style Config fill:#0f3460,stroke:#e94560,stroke-dasharray: 5 5
+    style Config fill:#0f3460,stroke:#e94560,stroke-dasharray: 3 3
+    style SDK_Scope fill:#0d1b2a,stroke:#415a77
 ```
 
-**Flexible triggering:** The receiver can pick up issues based on configuration — by comment trigger (`/fix`), by label, by tag, or on demand via the custom API. The scheduler mode crawls for open matching issues periodically. All modes are controlled through env vars.
+**Lifecycle:** Trigger → Receiver creates Sandbox CR → Operator watches CR and spawns pod → Agent runs SDK with tools/skills/plugins/MCP → Commits & PRs → Self-deletes CR → Operator cleans up pod.
 
 One Docker image, two entrypoints:
-- **Receiver** (default): FastAPI webhook service (long-running deployment)
+- **Receiver** (default): FastAPI webhook (long-running deployment)
 - **Agent** (`python -m app.agent`): runs inside ephemeral sandbox pods
 
 ## Quickstart

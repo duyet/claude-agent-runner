@@ -2,14 +2,49 @@
 
 ## System Architecture
 
-```
-GitHub Webhook (issue_comment with /fix)
-  ↓ HMAC verify
-receiver.py (FastAPI — long-running service)
-  ↓ Create Sandbox CR
-agent-sandbox operator (kubernetes-sigs/agent-sandbox)
-  ↓ Spawn ephemeral pod
-agent.py (inside pod — clone repo → run Claude Agent SDK → self-delete)
+```mermaid
+flowchart LR
+    subgraph Input["🔵 Inputs (external)"]
+        GH["GitHub Webhook<br/>issue_comment"]
+        CUSTOM["Custom API<br/>POST /webhook/custom"]
+        SCHED["Scheduler<br/>periodic"]
+    end
+
+    subgraph Receiver["🔵 Receiver (long-lived Deployment)"]
+        V["Verify → Allowlist → Create CR"]
+    end
+
+    subgraph CRD["🟡 Sandbox CR (per-task)"]
+        POD["spec.podTemplate<br/>PodSpec + envFrom"]
+        PVC["spec.volumeClaimTemplates<br/>ephemeral workspace"]
+        META["metadata.annotations<br/>repo / issue / reason"]
+    end
+
+    subgraph Operator["🔵 agent-sandbox Operator (long-lived)"]
+        W["Watch Sandbox CR"]
+        S["Spawn ephemeral pod"]
+        CL["CR deleted → cleanup pod"]
+    end
+
+    subgraph Agent["🟠 Sandbox Pod (ephemeral, one-shot)"]
+        GIT["Clone repo"]
+        SDK["Claude Agent SDK<br/>headless"]
+        SCOPE["Tools / Skills /<br/>Plugins / MCP"]
+        DONE["Commit → PR →<br/>Self-delete CR"]
+        SDK --- SCOPE
+    end
+
+    Input -->|trigger| Receiver
+    Receiver -->|create| CRD
+    CRD -.->|watch| Operator
+    Operator -->|spawn| Agent
+    Agent -->|self-delete| CRD
+    CRD -.->|cleanup| Operator
+
+    style CRD fill:#1a1a2e,stroke:#e94560
+    style Operator fill:#16213e,stroke:#0f3460
+    style Agent fill:#3d1a1a,stroke:#e94560
+    style Receiver fill:#16213e,stroke:#0f3460
 ```
 
 ## Component Details
@@ -41,9 +76,15 @@ Runs inside each sandbox pod as a one-shot task:
 
 1. Clone the target repo (depth 50)
 2. Set `GH_TOKEN` / `GITHUB_TOKEN` for GitHub tool
-3. Launch Claude Agent SDK with configured tools, skills, MCP
-4. Agent explores code, makes changes, commits, pushes, creates PR
-5. Self-deletes the Sandbox CR on completion
+3. Launch Claude Agent SDK in headless mode with full SDK capabilities:
+   - **Tools**: Read, Write, Edit, Bash, Glob, Grep, Git, GitHub, WebSearch, WebFetch, Monitor, Agent
+   - **Skills**: Auto-discovered from `.claude/skills/` in the cloned repo
+   - **Plugins**: Directories loaded via `SKILLS_DIR` / `PLUGINS` env
+   - **MCP servers**: Configured via `MCP_SERVERS` JSON env var
+4. Agent explores code, makes changes (governed by `CLAUDE_PERMISSION_MODE`), commits, pushes, creates PR
+5. Self-deletes the Sandbox CR on completion → operator cleans up the pod
+
+The agent is configured entirely through env vars — no hardcoded behaviour. All tools, permissions, model selection, and SDK settings come from the environment injected via `envFrom` (Secret + ConfigMap refs in the Sandbox CR).
 
 ### 4. GitHub App Auth (gh_token.py)
 
