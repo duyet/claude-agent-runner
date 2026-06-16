@@ -27,11 +27,11 @@
   <line x1="200" y1="115" x2="240" y2="115" stroke="#788C5D" stroke-width="1" marker-end="url(#arrow-green)"/>
   <text x="220" y="105" text-anchor="middle" class="s" fill="#788C5D">webhook</text>
 
-  <!-- Phase 2: Receiver -->
+  <!-- Phase 2: Receiver (FastAPI Pod) -->
   <rect x="240" y="80" width="180" height="70" rx="10" fill="#D97757" stroke="#141413" stroke-width="1"/>
   <text x="330" y="105" text-anchor="middle" class="m" fill="#FAF9F5">⚙️ ②</text>
-  <text x="330" y="125" text-anchor="middle" class="s" fill="#FAF9F5">Receiver</text>
-  <text x="330" y="140" text-anchor="middle" class="s" fill="#E3DACC">Verify → Create CR</text>
+  <text x="330" y="125" text-anchor="middle" class="s" fill="#FAF9F5">Receiver Pod</text>
+  <text x="330" y="140" text-anchor="middle" class="s" fill="#E3DACC">FastAPI · Verify → CR</text>
 
   <!-- Arrow 2 -->
   <line x1="420" y1="115" x2="460" y2="115" stroke="#87867F" stroke-width="1" marker-end="url(#arrow)"/>
