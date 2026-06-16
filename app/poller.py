@@ -2,6 +2,7 @@
 import asyncio
 import os
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -29,6 +30,10 @@ GH_APP_ID = os.environ.get("GH_APP_ID")
 GH_PRIVATE_KEY = os.environ.get("GH_PRIVATE_KEY")
 GH_TOKEN = os.environ.get("GH_TOKEN")
 
+# Rate limiting and caching
+PROCESSED_CACHE_TTL = 3600  # Keep processed items for 1 hour
+MAX_PROCESSED_ITEMS = 1000  # Maximum items to track in memory
+
 
 @dataclass
 class ProcessedItem:
@@ -43,15 +48,72 @@ class ProcessedItem:
         """Unique key for this item."""
         return f"{self.item_type}:{self.repo_full}:{self.number}"
 
+    def is_expired(self) -> bool:
+        """Check if this item has expired (for cache cleanup)."""
+        return time.time() - self.timestamp > PROCESSED_CACHE_TTL
+
+
+class LRUCache:
+    """Simple LRU cache with automatic expiration."""
+
+    def __init__(self, max_size: int = MAX_PROCESSED_ITEMS):
+        self.cache: OrderedDict[str, ProcessedItem] = OrderedDict()
+        self.max_size = max_size
+
+    def get(self, key: str) -> ProcessedItem | None:
+        """Get item from cache."""
+        if key not in self.cache:
+            return None
+
+        item = self.cache[key]
+        if item.is_expired():
+            del self.cache[key]
+            return None
+
+        # Move to end (most recently used)
+        self.cache.move_to_end(key)
+        return item
+
+    def put(self, key: str, item: ProcessedItem) -> None:
+        """Put item in cache."""
+        # Remove expired items first
+        self._cleanup_expired()
+
+        # Add new item
+        self.cache[key] = item
+        self.cache.move_to_end(key)
+
+        # Evict oldest if over limit
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+    def _cleanup_expired(self) -> None:
+        """Remove expired items from cache."""
+        expired_keys = [
+            k for k, v in self.cache.items()
+            if v.is_expired()
+        ]
+        for key in expired_keys:
+            del self.cache[key]
+
 
 class GitHubPoller:
-    """Polls GitHub for issues/PRs and creates Sandbox CRs using PyGithub."""
+    """Polls GitHub for issues/PRs and creates Sandbox CRs using PyGithub.
+
+    Optimized to minimize GitHub API requests:
+    - Uses since parameter to only fetch new/updated items
+    - Caches processed items to avoid duplicates
+    - Implements rate limit awareness
+    - Uses conditional requests when available
+    """
 
     def __init__(self):
         self._state_mgr: StateManager | None = None
-        self.processed: dict[str, ProcessedItem] = {}
+        self.processed = LRUCache()
         self.github: Github | None = None
-        self._github_token_expires_at: float = 0
+        self.last_poll_times: dict[str, float] = {}  # repo_full -> timestamp
+        self.rate_limit_reset: float = 0
+        self.remaining_requests: int = 5000  # GitHub default for authenticated
 
     @property
     def state_mgr(self) -> StateManager:
@@ -85,8 +147,22 @@ class GitHubPoller:
             except Exception as e:
                 log.error(f"Poll failed: {e}")
 
-            # Wait for next interval
-            await asyncio.sleep(INTERVAL_MINUTES * 60)
+            # Wait for next interval (or shorter if rate limited)
+            wait_time = self._get_wait_time()
+            log.debug(f"Waiting {wait_time/60:.1f} minutes until next poll")
+            await asyncio.sleep(wait_time)
+
+    def _get_wait_time(self) -> float:
+        """Calculate wait time considering rate limits."""
+        # If we're rate limited, wait until reset
+        if self.remaining_requests < 10 and time.time() < self.rate_limit_reset:
+            wait_until_reset = self.rate_limit_reset - time.time()
+            if wait_until_reset > 0:
+                log.warning(f"Near rate limit, waiting {wait_until_reset/60:.1f} minutes for reset")
+                return wait_until_reset
+
+        # Normal interval
+        return INTERVAL_MINUTES * 60
 
     async def _poll_once(self) -> None:
         """Poll all configured repos once."""
@@ -110,41 +186,77 @@ class GitHubPoller:
             log.error(f"Failed to get repo {repo_full}: {e}")
             return
 
+        # Update rate limit info from response headers
+        self._update_rate_limit_info()
+
+        # Get last poll time for this repo
+        last_poll = self.last_poll_times.get(repo_full, 0)
+        since_time = datetime.fromtimestamp(last_poll) if last_poll > 0 else None
+
         # Check for new issues
         if "issues" in EVENT_TYPES:
-            await self._check_new_issues(repo_full, repo)
+            await self._check_new_issues(repo_full, repo, since_time)
 
         # Check pull requests
         if "prs" in EVENT_TYPES:
-            await self._check_pull_requests(repo_full, repo)
+            await self._check_pull_requests(repo_full, repo, since_time)
 
-    async def _check_new_issues(self, repo_full: str, repo) -> None:
-        """Check for newly opened issues (all issues)."""
+        # Update last poll time
+        self.last_poll_times[repo_full] = time.time()
+
+    async def _check_new_issues(self, repo_full: str, repo, since_time: datetime | None) -> None:
+        """Check for newly opened issues since last poll."""
         try:
-            # Get open issues, sorted by recently created
-            issues = repo.get_issues(state="open", sort="created", direction="desc")
+            # Build query parameters - only get issues created since last poll
+            kwargs = {"state": "open", "sort": "created", "direction": "desc"}
 
+            # Use since parameter if we have a last poll time
+            if since_time:
+                # Only fetch issues created after our last poll
+                cutoff = since_time + timedelta(seconds=-60)  # 1 minute buffer to avoid missing edge cases
+                kwargs["since"] = cutoff.isoformat()
+                log.debug(f"Fetching issues created since {cutoff.isoformat()}")
+            else:
+                log.debug("Fetching all open issues (first poll)")
+
+            # Paginate through issues (PyGithub handles this automatically)
+            issues = repo.get_issues(**kwargs)
+
+            processed_count = 0
             for issue in issues:
                 # Skip pull requests (they're handled separately)
                 if issue.pull_request is not None:
                     continue
 
+                # Stop if we've seen this issue before
+                key = f"issue:{repo_full}:{issue.number}"
+                if self.processed.get(key):
+                    log.debug(f"Stopping at issue {issue.number} (already processed)")
+                    break
+
                 await self._process_new_issue(repo_full, issue)
+                processed_count += 1
+
+                # Safety limit to avoid processing too many issues at once
+                if processed_count >= 50:
+                    log.warning("Hit safety limit of 50 issues per poll cycle")
+                    break
+
+            if processed_count > 0:
+                log.info(f"Processed {processed_count} new issues from {repo_full}")
 
         except GithubException as e:
             log.error(f"GitHub API error fetching new issues: {e}")
 
-    async def _process_new_issue(self, repo_full: str, issue: -> None:
+    async def _process_new_issue(self, repo_full: str, issue: PyGithubIssue) -> None:
         """Process a new issue (all issues, not just labeled)."""
         number = issue.number
         key = f"issue:{repo_full}:{number}"
 
-        # Skip if already processed recently (within 1 hour)
-        if key in self.processed:
-            processed = self.processed[key]
-            if time.time() - processed.timestamp < 3600:
-                log.debug(f"Skipping recently processed issue {number}")
-                return
+        # Check if already in cache
+        if self.processed.get(key):
+            log.debug(f"Skipping already processed issue {number}")
+            return
 
         # Check if user is allowed
         sender = issue.user.login if issue.user else ""
@@ -174,19 +286,39 @@ class GitHubPoller:
         # Create Sandbox CR
         try:
             sandbox_name = k8shelper.create_sandbox(task)
-            self.processed[key] = ProcessedItem("issue", repo_full, number, time.time(), sandbox_name)
+            self.processed.put(key, ProcessedItem("issue", repo_full, number, time.time(), sandbox_name))
             log.info(f"Created sandbox {sandbox_name} for new issue {number}")
         except Exception as e:
             log.error(f"Failed to create sandbox for issue {number}: {e}")
 
-    async def _check_pull_requests(self, repo_full: str, repo) -> None:
-        """Check for recent pull requests."""
+    async def _check_pull_requests(self, repo_full: str, repo, since_time: datetime | None) -> None:
+        """Check for recent pull requests since last poll."""
         try:
-            # Get open PRs, sorted by recently created
-            prs = repo.get_pulls(state="open", sort="created", direction="desc")
+            kwargs = {"state": "open", "sort": "created", "direction": "desc"}
 
+            if since_time:
+                cutoff = since_time + timedelta(seconds=-60)
+                kwargs["since"] = cutoff.isoformat()
+
+            prs = repo.get_pulls(**kwargs)
+
+            processed_count = 0
             for pr in prs:
+                # Stop if we've seen this PR before
+                key = f"pr:{repo_full}:{pr.number}"
+                if self.processed.get(key):
+                    log.debug(f"Stopping at PR {pr.number} (already processed)")
+                    break
+
                 await self._process_pull_request(repo_full, pr)
+                processed_count += 1
+
+                if processed_count >= 20:
+                    log.warning("Hit safety limit of 20 PRs per poll cycle")
+                    break
+
+            if processed_count > 0:
+                log.info(f"Processed {processed_count} new PRs from {repo_full}")
 
         except GithubException as e:
             log.error(f"GitHub API error fetching PRs: {e}")
@@ -196,12 +328,10 @@ class GitHubPoller:
         number = pr.number
         key = f"pr:{repo_full}:{number}"
 
-        # Skip if already processed recently (within 1 hour)
-        if key in self.processed:
-            processed = self.processed[key]
-            if time.time() - processed.timestamp < 3600:
-                log.debug(f"Skipping recently processed PR {number}")
-                return
+        # Check if already in cache
+        if self.processed.get(key):
+            log.debug(f"Skipping already processed PR {number}")
+            return
 
         # Check if user is allowed
         sender = pr.user.login if pr.user else ""
@@ -231,7 +361,7 @@ class GitHubPoller:
         # Create Sandbox CR
         try:
             sandbox_name = k8shelper.create_sandbox(task)
-            self.processed[key] = ProcessedItem("pr", repo_full, number, time.time(), sandbox_name)
+            self.processed.put(key, ProcessedItem("pr", repo_full, number, time.time(), sandbox_name))
             log.info(f"Created sandbox {sandbox_name} for PR {number}")
         except Exception as e:
             log.error(f"Failed to create sandbox for PR {number}: {e}")
@@ -242,6 +372,21 @@ class GitHubPoller:
             return True
         base = sender.lower().removesuffix("[bot]")
         return sender.lower() in ALLOWED_USERS or base in ALLOWED_USERS
+
+    def _update_rate_limit_info(self) -> None:
+        """Update rate limit information from GitHub client."""
+        if not self.github:
+            return
+
+        try:
+            # PyGithub stores rate limit info from the last response
+            rate_limit = self.github.get_rate_limit()
+            if rate_limit and rate_limit.search:
+                self.remaining_requests = rate_limit.search.remaining
+                self.rate_limit_reset = rate_limit.search.reset.timestamp()
+                log.debug(f"Rate limit: {self.remaining_requests} requests remaining, resets at {datetime.fromtimestamp(self.rate_limit_reset)}")
+        except Exception as e:
+            log.debug(f"Failed to get rate limit info: {e}")
 
     def _ensure_github_client(self) -> None:
         """Ensure GitHub client is initialized with valid authentication."""
@@ -300,13 +445,16 @@ class GitHubPoller:
                             item_type = run.trigger_context.get("trigger_type", "issue")
 
                             key = f"{item_type}:{repo_full}:{number}"
-                            self.processed[key] = ProcessedItem(
+                            item = ProcessedItem(
                                 item_type, repo_full, number, run.created_at, run.sandbox_name
                             )
+                            # Only add if not expired
+                            if not item.is_expired():
+                                self.processed.put(key, item)
                     except (ValueError, IndexError):
                         pass
 
-            log.info(f"Loaded {len(self.processed)} processed items from state")
+            log.info(f"Loaded {len(self.processed.cache)} processed items from state")
 
         except Exception as e:
             log.warning(f"Failed to load processed items from state: {e}")

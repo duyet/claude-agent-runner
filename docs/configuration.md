@@ -91,8 +91,8 @@ For cloud provider auth, set the corresponding env vars in the pod (SDK auto-det
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-5-20250929` | Model ID |
-| `ANTHROPIC_BASE_URL` | — | Custom base URL (e.g. `https://anyrouter.dev/api`). SDK appends `/v1/messages` |
+| `ANTHROPIC_MODEL` | `anthropic/claude-sonnet-4-6` | Model ID. Use `provider/model` format when routing via AnyRouter |
+| `ANTHROPIC_BASE_URL` | — | Custom base URL (e.g. `https://anyrouter.dev/api`). SDK appends `/v1/messages`. When set, `ANTHROPIC_API_KEY` must equal `ANYROUTER_API_KEY` |
 | `CLAUDE_PERMISSION_MODE` | `auto` | Permission mode: auto, bypassPermissions, dontAsk, acceptEdits, default |
 | `CLAUDE_MAX_TURNS` | `50` | Max conversation turns |
 | `APPEND_SYSTEM_PROMPT` | — | Extra text appended to the system prompt (also settable via `--append-system-prompt` CLI arg) |

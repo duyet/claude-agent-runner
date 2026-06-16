@@ -140,7 +140,7 @@ def main() -> None:
     model = (
         cli_args.model
         if cli_args and cli_args.model
-        else env("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+        else env("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
     )
     max_turns = (
         cli_args.max_turns
@@ -230,7 +230,7 @@ async def run_agent_sdk(
     model = (
         cli_args.model
         if cli_args and cli_args.model
-        else env("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
+        else env("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
     )
     max_turns = (
         cli_args.max_turns

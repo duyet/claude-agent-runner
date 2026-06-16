@@ -27,28 +27,35 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 ```mermaid
 sequenceDiagram
     participant GH as 📝 GitHub
+    participant PL as 🔄 Poller
     participant RP as ∞ Receiver Pod
     participant K8s as ☸️ K8s API
     participant OP as 👁️ Operator
     participant AG as ⏱️ Pod
 
     Note right of RP: Long-running
+    Note right of PL: Pull mode (every 3m)
     Note right of OP: Long-running
     Note right of AG: Ephemeral
 
-    GH->>RP: webhook (/fix comment)
+    loop Every 3 minutes
+        PL->>GH: poll new issues
+        GH-->>PL: new issues
+        PL->>K8s: create Sandbox CR
+    end
+
+    GH->>RP: webhook (/fix comment, optional)
     RP->>RP: verify HMAC
     RP->>K8s: create Sandbox CR
     K8s->>OP: watch event
     OP->>AG: spawn pod
     
     AG->>AG: clone repo
-    AG->>AG: run SDK
+    AG->>AG: run SDK (via AnyRouter)
     AG->>AG: track state
-    AG->>AG: git ops
 
     AG->>K8s: delete Sandbox CR
-    Note right of AG: ✅ Done
+    Note right of AG: Done
 ```
 
 **Lifecycle Phases:**
@@ -82,6 +89,20 @@ helm upgrade --install agent-runner ./charts/agent-runner \
   -n agent-sandbox --create-namespace \
   -f values.yaml -f secrets.local.yaml
 ```
+
+## Self-Improvement Loop
+
+The runner creates a self-healing cycle for the homelab:
+
+1. **Issue created** on `duyet/infra` GitHub repo
+2. **Poller detects** it within 3 minutes (no public webhook needed)
+3. **Agent spawns** — clones `duyet/infra`, analyzes the issue
+4. **Claude fixes** the infrastructure config (values.yaml, manifests, etc.)
+5. **PR opened** on `duyet/infra`
+6. **ArgoCD reconciles** the cluster
+7. Loop continues
+
+Hermes (the cluster Telegram AI agent) can also trigger runs directly via `POST /api/v1/webhook/custom`.
 
 ## Configuration
 
@@ -127,6 +148,18 @@ The SDK appends `/v1/messages`, so the base URL must stop at `/api`. Keep the `a
 - `CLAUDE_CODE_USE_BEDROCK=1` + AWS credentials → Amazon Bedrock
 - `CLAUDE_CODE_USE_VERTEX=1` + GCP credentials → Google Vertex AI
 - `CLAUDE_CODE_USE_FOUNDRY=1` + Azure credentials → Azure AI Foundry
+
+### AnyRouter Gateway
+
+Route all LLM calls through [AnyRouter](https://anyrouter.dev) for unified billing:
+
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_BASE_URL` | `https://anyrouter.dev/api` |
+| `ANTHROPIC_API_KEY` | Your AnyRouter key (`sk-ar-...`) |
+| `ANTHROPIC_MODEL` | `anthropic/claude-sonnet-4-6` |
+
+Model IDs use `provider/model` format: `anthropic/claude-sonnet-4-6`, `anthropic/claude-haiku-4-5`.
 
 ### Permissions & Tools
 

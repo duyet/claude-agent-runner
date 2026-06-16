@@ -7,7 +7,8 @@ flowchart LR
     subgraph Input["🔵 Inputs (external)"]
         GH["GitHub Webhook<br/>issue_comment"]
         CUSTOM["Custom API<br/>POST /webhook/custom"]
-        SCHED["Scheduler<br/>periodic"]
+        POLL["GitHub Poller<br/>every 3 min"]
+        HERMES["Hermes Agent<br/>Telegram trigger"]
     end
 
     subgraph Receiver["🔵 Receiver (long-lived Deployment)"]
@@ -141,3 +142,18 @@ Create Sandbox CR (same as GitHub flow)
   - Resource limits on CPU/memory
   - `activeDeadlineSeconds` pod timeout
 - **GitHub App auth**: JWT-based with short-lived installation tokens
+
+## Pull Mode Flow (homelab, no public webhook)
+
+GitHub issue created on duyet/infra
+  ↓
+Poller checks every 3 minutes via GitHub API
+  ↓
+New issue detected → de-duplicated via persistent state
+  ↓
+Create Sandbox CR (same path as webhook flow)
+  ↓
+Agent spawns → analyzes → fixes → commit → PR → self-deletes
+  ↓
+ArgoCD reconciles duyet/infra → cluster updated
+  ↓ (self-improvement loop)
