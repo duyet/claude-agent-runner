@@ -1,202 +1,110 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="450" viewBox="0 0 1000 450">
   <defs>
-    <!-- Component Gradients -->
-    <linearGradient id="apiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#a371f7;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#8957e5;stop-opacity:1" />
-    </linearGradient>
-    <linearGradient id="sdkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f78166;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#da3633;stop-opacity:1" />
-    </linearGradient>
-    <linearGradient id="stateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#238636;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1a662e;stop-opacity:1" />
-    </linearGradient>
-    <linearGradient id="gitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f0883e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#db6d28;stop-opacity:1" />
-    </linearGradient>
+    <style>
+      .m { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11px; }
+      .s { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 12px; }
+    </style>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L0,7 L7,3.5 z" fill="#87867F"/>
+    </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="1000" height="500" fill="#0d1117" />
+  <rect width="1000" height="450" fill="#FAF9F5"/>
 
   <!-- Title -->
-  <text x="500" y="35" text-anchor="middle" fill="#c9d1d9" font-size="22" font-weight="bold">Architecture Design Components</text>
+  <text x="500" y="35" text-anchor="middle" class="s" fill="#141413" font-size="16px" font-weight="500">Architecture Components</text>
 
-  <!-- Main Container: Receiver -->
-  <g transform="translate(50, 70)">
-    <rect width="280" height="180" rx="15" fill="#161b22" stroke="#1f6feb" stroke-width="3"/>
-    <text x="140" y="25" text-anchor="middle" fill="#1f6feb" font-size="18" font-weight="bold">⚙️ Receiver Service</text>
-    <text x="140" y="45" text-anchor="middle" fill="#c9d1d9" font-size="13">claude-agent-runner FastAPI Pod</text>
+  <!-- Receiver Service -->
+  <rect x="50" y="70" width="250" height="150" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="2"/>
+  <text x="175" y="100" text-anchor="middle" class="m" fill="#141413">⚙️ Receiver</text>
+  <text x="175" y="120" text-anchor="middle" class="s" fill="#87867F">FastAPI Pod</text>
 
-    <!-- Components -->
-    <g transform="translate(20, 60)">
-      <rect width="240" height="35" rx="8" fill="url(#apiGrad)"/>
-      <text x="120" y="23" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="bold">🌐 FastAPI</text>
-    </g>
+  <rect x="70" y="140" width="210" height="30" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="175" y="160" text-anchor="middle" class="m" fill="#3D3D3A">🌐 Webhook endpoints</text>
 
-    <g transform="translate(20, 105)">
-      <rect width="115" height="30" rx="6" fill="#0d1117" stroke="#238636" stroke-width="1"/>
-      <text x="57" y="20" text-anchor="middle" fill="#238636" font-size="11">/webhook/github</text>
-    </g>
-
-    <g transform="translate(145, 105)">
-      <rect width="115" height="30" rx="6" fill="#0d1117" stroke="#238636" stroke-width="1"/>
-      <text x="57" y="20" text-anchor="middle" fill="#238636" font-size="11">/webhook/custom</text>
-    </g>
-
-    <g transform="translate(20, 145)">
-      <rect width="240" height="25" rx="6" fill="#0d1117" stroke="#1f6feb" stroke-width="1"/>
-      <text x="120" y="17" text-anchor="middle" fill="#1f6feb" font-size="11">☸️ Kubernetes API Client</text>
-    </g>
-  </g>
+  <rect x="70" y="185" width="210" height="25" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="175" y="202" text-anchor="middle" class="s" fill="#3D3D3A">Kubernetes API client</text>
 
   <!-- Agent Pod -->
-  <g transform="translate(370, 70)">
-    <rect width="320" height="350" rx="15" fill="#161b22" stroke="#f78166" stroke-width="3"/>
-    <text x="160" y="25" text-anchor="middle" fill="#f78166" font-size="18" font-weight="bold">🤖 Agent Pod (Ephemeral)</text>
+  <rect x="350" y="70" width="300" height="350" rx="10" fill="#D97757" stroke="#141413" stroke-width="2"/>
+  <text x="500" y="100" text-anchor="middle" class="m" fill="#FAF9F5">🤖 Agent Pod</text>
 
-    <!-- Core Components Section -->
-    <g transform="translate(20, 45)">
-      <rect width="280" height="120" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-      <text x="140" y="20" text-anchor="middle" fill="#c9d1d9" font-size="14" font-weight="bold">Core Components</text>
+  <!-- Core Components -->
+  <rect x="370" y="130" width="260" height="100" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <text x="500" y="155" text-anchor="middle" class="s" fill="#141413">Core Components</text>
 
-      <g transform="translate(15, 35)">
-        <rect width="80" height="35" rx="6" fill="url(#sdkGrad)"/>
-        <text x="40" y="23" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="bold">Claude</text>
-        <text x="40" y="35" text-anchor="middle" fill="#ffffff" font-size="9">Agent SDK</text>
-      </g>
+  <rect x="390" y="170" width="70" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="425" y="195" text-anchor="middle" class="m" fill="#3D3D3A">Claude</text>
 
-      <g transform="translate(105, 35)">
-        <rect width="80" height="35" rx="6" fill="url(#stateGrad)"/>
-        <text x="40" y="23" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="bold">State</text>
-        <text x="40" y="35" text-anchor="middle" fill="#ffffff" font-size="9">Manager</text>
-      </g>
+  <rect x="480" y="170" width="70" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="515" y="195" text-anchor="middle" class="m" fill="#3D3D3A">State</text>
 
-      <g transform="translate(195, 35)">
-        <rect width="70" height="35" rx="6" fill="url(#gitGrad)"/>
-        <text x="35" y="23" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="bold">Git</text>
-        <text x="35" y="35" text-anchor="middle" fill="#ffffff" font-size="9">Clone</text>
-      </g>
+  <rect x="570" y="170" width="50" height="40" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="595" y="195" text-anchor="middle" class="m" fill="#3D3D3A">Git</text>
 
-      <text x="140" y="90" text-anchor="middle" fill="#8b949e" font-size="11">Tools: Read, Write, Edit, Bash, GitHub, WebSearch, WebFetch</text>
-      <text x="140" y="105" text-anchor="middle" fill="#8b949e" font-size="11">State: Run tracking, Session recording</text>
-    </g>
+  <!-- Tools List -->
+  <rect x="370" y="250" width="260" height="80" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <text x="500" y="275" text-anchor="middle" class="s" fill="#141413">Agent Tools</text>
+  <text x="390" y="295" class="s" fill="#87867F" font-size="11px">Read • Write • Edit • Bash</text>
+  <text x="390" y="310" class="s" fill="#87867F" font-size="11px">GitHub • WebSearch • WebFetch</text>
 
-    <!-- Tools Section -->
-    <g transform="translate(20, 175)">
-      <rect width="280" height="80" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-      <text x="140" y="20" text-anchor="middle" fill="#c9d1d9" font-size="13" font-weight="bold">Agent SDK Tools</text>
+  <!-- Git Operations -->
+  <rect x="370" y="345" width="260" height="60" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <text x="500" y="370" text-anchor="middle" class="s" fill="#141413">Git Operations</text>
 
-      <text x="20" y="40" fill="#a371f7" font-size="11">• Read / Write / Edit files</text>
-      <text x="150" y="40" fill="#1f6feb" font-size="11">• Bash commands</text>
-      <text x="20" y="58" fill="#238636" font-size="11">• GitHub (PR/Issue)</text>
-      <text x="150" y="58" fill="#f0883e" font-size="11">• WebSearch / Fetch</text>
-      <text x="20" y="76" fill="#f78166" font-size="11">• Glob / Grep search</text>
-    </g>
+  <rect x="390" y="385" width="60" height="15" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1.5"/>
+  <text x="420" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Commit</text>
 
-    <!-- Git Operations -->
-    <g transform="translate(20, 265)">
-      <rect width="280" height="70" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-      <text x="140" y="20" text-anchor="middle" fill="#c9d1d9" font-size="13" font-weight="bold">Git Operations</text>
+  <rect x="460" y="385" width="50" height="15" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1.5"/>
+  <text x="485" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Push</text>
 
-      <g transform="translate(15, 35)">
-        <rect width="70" height="25" rx="5" fill="#238636"/>
-        <text x="35" y="17" text-anchor="middle" fill="#ffffff" font-size="11">Commit</text>
-      </g>
+  <rect x="520" y="385" width="70" height="15" rx="10" fill="#788C5D" stroke="#141413" stroke-width="1.5"/>
+  <text x="555" y="396" text-anchor="middle" class="m" fill="#FAF9F5" font-size="10px">Create PR</text>
 
-      <g transform="translate(100, 35)">
-        <rect width="70" height="25" rx="5" fill="#1f6feb"/>
-        <text x="35" y="17" text-anchor="middle" fill="#ffffff" font-size="11">Push</text>
-      </g>
+  <!-- State Backend -->
+  <rect x="700" y="70" width="250" height="180" rx="10" fill="#87867F" stroke="#141413" stroke-width="2"/>
+  <text x="825" y="100" text-anchor="middle" class="m" fill="#FAF9F5">💾 State Backend</text>
 
-      <g transform="translate(185, 35)">
-        <rect width="70" height="25" rx="5" fill="#f0883e"/>
-        <text x="35" y="17" text-anchor="middle" fill="#ffffff" font-size="11">Create PR</text>
-      </g>
-    </g>
-  </g>
+  <rect x="720" y="130" width="70" height="50" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="755" y="155" text-anchor="middle" class="m" fill="#3D3D3A">🏃 Iso</text>
+  <text x="755" y="170" text-anchor="middle" class="s" fill="#87867F" font-size="10px">In-memory</text>
 
-  <!-- State Storage -->
-  <g transform="translate(720, 70)">
-    <rect width="250" height="200" rx="15" fill="#161b22" stroke="#8957e5" stroke-width="3"/>
-    <text x="125" y="25" text-anchor="middle" fill="#8957e5" font-size="18" font-weight="bold">💾 State Backend</text>
+  <rect x="810" y="130" width="70" height="50" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="845" y="155" text-anchor="middle" class="m" fill="#3D3D3A">🔄 Shared</text>
+  <text x="845" y="170" text-anchor="middle" class="s" fill="#87867F" font-size="10px">PVC + cache</text>
 
-    <g transform="translate(25, 50)">
-      <rect width="90" height="50" rx="8" fill="#0d1117" stroke="#238636" stroke-width="2"/>
-      <text x="45" y="22" text-anchor="middle" fill="#238636" font-size="13" font-weight="bold">🏃</text>
-      <text x="45" y="38" text-anchor="middle" fill="#c9d1d9" font-size="11">Isolated</text>
-      <text x="45" y="50" text-anchor="middle" fill="#8b949e" font-size="9">In-memory</text>
-    </g>
+  <rect x="720" y="195" width="70" height="50" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="755" y="220" text-anchor="middle" class="m" fill="#3D3D3A">🗄️ DB</text>
+  <text x="755" y="235" text-anchor="middle" class="s" fill="#87867F" font-size="10px">PostgreSQL</text>
 
-    <g transform="translate(135, 50)">
-      <rect width="90" height="50" rx="8" fill="#0d1117" stroke="#1f6feb" stroke-width="2"/>
-      <text x="45" y="22" text-anchor="middle" fill="#1f6feb" font-size="13" font-weight="bold">🔄</text>
-      <text x="45" y="38" text-anchor="middle" fill="#c9d1d9" font-size="11">Shared</text>
-      <text x="45" y="50" text-an>
-       </text>
-    </g>
+  <!-- Kubernetes -->
+  <rect x="50" y="250" width="250" height="120" rx="10" fill="#788C5D" stroke="#141413" stroke-width="2"/>
+  <text x="175" y="280" text-anchor="middle" class="m" fill="#FAF9F5">☸️ Kubernetes</text>
 
-    <g transform="translate(25, 115)">
-      <rect width="90" height="50" rx="8" fill="#0d1117" stroke="#a371f7" stroke-width="2"/>
-      <text x="45" y="22" text-anchor="middle" fill="#a371f7" font-size="13" font-weight="bold">🗄️</text>
-      <text x="45" y="38" text-anchor="middle" fill="#c9d1d9" font-size="11">External</text>
-      <text x="45" y="50" text-anchor="middle" fill="#8b949e" font-size="9">PostgreSQL</text>
-    </g>
+  <rect x="70" y="300" width="210" height="25" rx="10" fill="#FAF9F5" stroke="#141413" stroke-width="1.5"/>
+  <text x="175" y="317" text-anchor="middle" class="s" fill="#788C5D">API server + CRD storage</text>
 
-    <g transform="translate(135, 115)">
-      <rect width="90" height="50" rx="8" fill="#0d1117" stroke="#f78166" stroke-width="2"/>
-      <text x="45" y="22" text-anchor="middle" fill="#f78166" font-size="13" font-weight="bold">⚡</text>
-      <text x="45" y="38" text-anchor="middle" fill="#c9d1d9" font-size="11">Redis</text>
-      <text x="45" y="50" text-anchor="middle" fill="#8b949e" font-size="9">Cache</text>
-    </g>
-
-    <text x="125" y="185" text-anchor="middle" fill="#c9d1d9" font-size="12">Run history + Sessions</text>
-  </g>
-
-  <!-- Kubernetes Components -->
-  <g transform="translate(50, 280)">
-    <rect width="280" height="140" rx="15" fill="#161b22" stroke="#3fb950" stroke-width="3"/>
-    <text x="140" y="25" text-anchor="middle" fill="#3fb950" font-size="18" font-weight="bold">☸️ Kubernetes</text>
-
-    <g transform="translate(20, 45)">
-      <rect width="240" height="30" rx="8" fill="#0d1117" stroke="#3fb950" stroke-width="1"/>
-      <text x="120" y="20" text-anchor="middle" fill="#3fb950" font-size="12">API Server + CRD Storage</text>
-    </g>
-
-    <g transform="translate(20, 85)">
-      <rect width="115" height="35" rx="8" fill="#0d1117" stroke="#f0883e" stroke-width="1"/>
-      <text x="57" y="23" text-anchor="middle" fill="#f0883e" font-size="12">🔵 Operator</text>
-    </g>
-
-    <g transform="translate(145, 85)">
-      <rect width="115" height="35" rx="8" fill="#0d1117" stroke:#238636" stroke-width="1"/>
-      <text x="57" y="23" text-anchor="middle" fill="#238636" font-size="12">📦 PVC Storage</text>
-    </g>
-  </g>
+  <rect x="70" y="335" width="100" height="25" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="1.5"/>
+  <text x="120" y="352" text-anchor="middle" class="s" fill="#141413">🔵 Operator</text>
 
   <!-- External Triggers -->
-  <g transform="translate(720, 290)">
-    <rect width="250" height="130" rx="15" fill="#161b22" stroke="#238636" stroke-width="3"/>
-    <text x="125" y="25" text-an>
-      middle" fill="#238636" font-size="18" font-weight="bold">🌐 External Triggers</text>
+  <rect x="700" y="280" width="250" height="80" rx="10" fill="#E3DACC" stroke="#141413" stroke-width="2"/>
+  <text x="825" y="305" text-anchor="middle" class="m" fill="#141413">🌐 Triggers</text>
 
-    <g transform="translate(25, 50)">
-      <rect width="90" height="30" rx="8" fill="#0d1117" stroke:#238636" stroke-width="2"/>
-      <text x="45" y="20" text-anchor="middle" fill="#238636" font-size="12">📝 GitHub</text>
-    </g>
+  <rect x="720" y="325" width="90" height="25" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="765" y="342" text-anchor="middle" class="s" fill="#3D3D3A">📝 GitHub</text>
 
-    <g transform="translate(135, 50)">
-      <rect width="90" height="30" rx="8" fill="#0d1117" stroke:#1f6feb" stroke-width="2"/>
-      <text x="45" y="20" text-anchor="middle" fill="#1f6feb" font-size="12">🔔 Webhook</text>
-    </g>
+  <rect x="830" y="325" width="90" height="25" rx="10" fill="#F0EEE6" stroke="#3D3D3A" stroke-width="1.5"/>
+  <text x="875" y="342" text-anchor="middle" class="s" fill="#3D3D3A">🔔 Webhook</text>
 
-    <text x="125" y="100" text-anchor="middle" fill="#c9d1d9" font-size="11">/fix comments on issues</text>
-    <text x="125" y="115" text-anchor="middle" fill="#c9d1d9" font-size="11">Custom API calls</text>
-  </g>
+  <!-- Arrows -->
+  <line x1="300" y1="145" x2="350" y2="145" stroke="#87867F" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="650" y1="145" x2="700" y2="145" stroke="#87867F" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Dashed arrow to state -->
+  <path d="M 500 420 L 500 440 L 825 440 L 825 250" fill="none" stroke="#87867F" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <text x="660" y="435" text-anchor="middle" class="s" fill="#87867F">read/write</text>
 
   <!-- Footer -->
-  <text x="500" y="480" text-anchor="middle" fill="#8b949e" font-size="12">All components run in Kubernetes with configurable state persistence</text>
+  <text x="500" y="480" text-anchor="middle" class="s" fill="#87867F">All components run in Kubernetes with configurable state persistence</text>
 </svg>
