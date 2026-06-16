@@ -20,7 +20,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/claude-agent-runner
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
