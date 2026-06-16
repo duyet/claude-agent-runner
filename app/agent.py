@@ -188,7 +188,9 @@ async def run_agent_sdk(prompt: str, cli_args: argparse.Namespace | None = None)
         opts.mcp_servers = json.loads(mcp_servers)
 
     async for msg in query(prompt=prompt, options=opts):
-        log.info("agent -> %s", type(msg).__name__)
+        mtype = type(msg).__name__
+        content = msg.content[:200] if hasattr(msg, 'content') and msg.content else ''
+        log.info("agent -> %s: %.200s", mtype, str(content).replace('\n', '\\n'))
 
 
 def _prompt(task: dict) -> str:
@@ -199,15 +201,40 @@ def _prompt(task: dict) -> str:
         f"\n5. Commit your changes (co-authored with {co_author})."
         if co_author else "\n5. Commit your changes."
     )
-    return f"""Fix GitHub issue/PR #{task['number']} in the cloned repo at the current working directory.
+    title = task.get("title", "")
+    body = task.get("body", "")
+    number = task.get("number", 0)
+    reason = task.get("reason", "")
 
-Title: {task['title']}
+    # Real GitHub issue — reference it
+    if number and number < 1000000:
+        return f"""Fix GitHub issue/PR #{number} in the cloned repo at the current working directory.
+
+Title: {title}
 
 Description:
-{task['body']}{extra}
+{body}{extra}
 
 Steps:
 1. Explore the codebase to understand the issue.
+2. Make minimal, correct changes.
+3. If tests exist, run them and verify they pass.
+4. Commit your changes.{co_author_line}
+5. Push to a new branch.
+6. Create a pull request using the GitHub tool."""
+
+    # Custom / API trigger — describe the task directly
+    header = f"Reason: {reason}" if reason else ""
+    return f"""You are working on the cloned repo at the current working directory.
+
+{header}
+Title: {title}
+
+Description:
+{body}{extra}
+
+Steps:
+1. Explore the codebase to understand the context.
 2. Make minimal, correct changes.
 3. If tests exist, run them and verify they pass.
 4. Commit your changes.{co_author_line}
