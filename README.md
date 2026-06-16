@@ -6,51 +6,91 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 ```mermaid
 flowchart LR
-    subgraph External["🌐 External Triggers"]
-        GH["GitHub Issues<br/>/fix comments"]
-        WH["Custom Webhook<br/>API calls"]
+    subgraph External["🌐 Triggers"]
+        GH["GitHub<br/>Issue /fix"]
+        WH["Webhook<br/>Custom API"]
+        GIT["Git Push<br/>New branch"]
     end
 
-    subgraph Receiver["⚙️ Receiver Service<br/>Long-running Pod<br/>claude-agent-runner FastAPI"]
-        K8S["📡 Call Kubernetes API<br/>create Sandbox CR"]
+    subgraph Receiver["⚙️ Receiver<br/>claude-agent-runner FastAPI Pod"]
+        K8S["📡 Kubernetes API<br/>Create Sandbox CR"]
+        WEB["🌐 Health / Status<br/>HTTP endpoints"]
     end
 
-    subgraph Operator["🔵 agent-sandbox-operator<br/>Kubernetes Controller"]
+    subgraph Cluster["☸️ Kubernetes Cluster"]
         direction TB
-        NOTE["Watches Sandbox CR<br/>Spawns Agent Pods"]
+        API["API Server<br/>CRD storage"]
+        PV["PVC Storage<br/>Shared volumes"]
+    end
+
+    subgraph Operator["🔵 agent-sandbox-operator<br/>Controller"]
+        direction TB
+        WATCH["Watch Sandbox CR<br/>Spawn Agent Pods<br/>Cleanup lifecycle"]
     end
 
     subgraph Agent["🤖 Agent Pod<br/>Ephemeral Sandbox"]
-        CLONE["📥 Clone Repo"]
-        SDK["⚡ Claude Agent SDK<br/>State Manager"]
-        DONE["🧹 Self-delete"]
+        CLONE["📥 Clone Repository"]
+        SDK["⚡ Claude Agent SDK<br/>State tracking"]
+        GIT_OPS["🔧 Git operations<br/>Commit / Push / PR"]
+        DONE["🧹 Self-delete<br/>Remove Sandbox CR"]
+    end
+
+    subgraph Storage["💾 State Backend"]
+        ISO["🏃 Isolated<br/>Ephemeral"]
+        SH["🔄 Shared<br/>PVC + Memory cache"]
+        DB["🗄️ External<br/>PostgreSQL / Redis"]
     end
 
     GH --> Receiver
     WH --> Receiver
+    GIT --> Receiver
     Receiver --> K8S
-    K8S -.->|"Creates<br/>Sandbox CR"| Operator
-    Operator -.->|"Spawns<br/>Agent Pod"| Agent
+    Receiver --> WEB
+    K8S --> API
+    API -.->|"Create Sandbox CR"| Operator
+    Operator -.->|"Spawn Agent Pod"| Agent
+    Agent --> PV
+    Agent -.->|"Read / Write"| Storage
+    GIT_OPS -->|"Push code"| GIT
+    DONE -.->|"Delete Sandbox CR"| API
 
     style External fill:#0d1117,stroke:#30363d,stroke-width:2px,color:#c9d1d9
     style Receiver fill:#161b22,stroke:#30363d,stroke-width:2px,color:#c9d1d9
+    style Cluster fill:#161b22,stroke:#30363d,stroke-width:2px,color:#c9d1d9
     style Operator fill:#161b22,stroke:#30363d,stroke-width:2px,color:#c9d1d9
     style Agent fill:#161b22,stroke:#30363d,stroke-width:2px,color:#c9d1d9
+    style Storage fill:#0d1117,stroke:#30363d,stroke-width:2px,color:#c9d1d9
 
     style GH fill:#238636,stroke:#238636,stroke-width:1px,color:#ffffff
     style WH fill:#1f6feb,stroke:#1f6feb,stroke-width:1px,color:#ffffff
-    style K8S fill:#f0883e,stroke:#f0883e,stroke-width:1px,color:#ffffff
-    style NOTE fill:#3fb950,stroke:#3fb950,stroke-width:1px,color:#ffffff
+    style GIT fill:#f0883e,stroke:#f0883e,stroke-width:1px,color:#ffffff
+    style K8S fill:#a371f7,stroke:#a371f7,stroke-width:1px,color:#ffffff
+    style WEB fill:#3fb950,stroke:#3fb950,stroke-width:1px,color:#ffffff
+    style API fill:#f78166,stroke:#f78166,stroke-width:1px,color:#ffffff
+    style PV fill:#8b949e,stroke:#8b949e,stroke-width:1px,color:#ffffff
+    style WATCH fill:#3fb950,stroke:#3fb950,stroke-width:1px,color:#ffffff
     style CLONE fill:#a371f7,stroke:#a371f7,stroke-width:1px,color:#ffffff
     style SDK fill:#f78166,stroke:#f78166,stroke-width:1px,color:#ffffff
+    style GIT_OPS fill:#f0883e,stroke:#f0883e,stroke-width:1px,color:#ffffff
     style DONE fill:#8b949e,stroke:#8b949e,stroke-width:1px,color:#ffffff
+    style ISO fill:#238636,stroke:#238636,stroke-width:1px,color:#ffffff
+    style SH fill:#1f6feb,stroke:#1f6feb,stroke-width:1px,color:#ffffff
+    style DB fill:#a371f7,stroke:#a371f7,stroke-width:1px,color:#ffffff
 ```
 
-**Architecture Components:**
-- 🌐 **External Triggers**: GitHub issues (`/fix` comments) or custom webhooks
-- ⚙️ **Receiver Service**: Long-running `claude-agent-runner` FastAPI pod that calls Kubernetes API to create Sandbox CRs
-- 🔵 **Operator**: Standalone `agent-sandbox-operator` controller that watches Sandbox CRs and spawns agent pods
-- 🤖 **Agent Pod**: Ephemeral sandbox that clones repo, runs Claude Agent SDK with state management, then self-deletes
+**Architecture:**
+
+**🌐 Triggers** — GitHub issues (`/fix` comments), custom webhooks, or git push events
+
+**⚙️ Receiver** — Long-running `claude-agent-runner` FastAPI pod with health endpoints that calls Kubernetes API to create Sandbox CRs
+
+**☸️ Kubernetes Cluster** — API server with CRD storage and PVC storage for shared volumes
+
+**🔵 Operator** — Standalone `agent-sandbox-operator` controller that watches Sandbox CRs and handles agent pod lifecycle
+
+**🤖 Agent Pod** — Ephemeral sandbox that clones repository, runs Claude Agent SDK with state tracking, performs git operations (commit/push/PR), then self-deletes
+
+**💾 State Backend** — Configurable persistence: isolated (ephemeral), shared (PVC + memory cache), or external (PostgreSQL/Redis)
 
 One Docker image, two entrypoints:
 - **Receiver** (default): FastAPI webhook (long-running deployment)
