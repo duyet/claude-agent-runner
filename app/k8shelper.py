@@ -16,7 +16,7 @@ GROUP = "agents.x-k8s.io"
 VERSION = "v1alpha1"
 PLURAL = "sandboxes"
 NS = env("SANDBOX_NAMESPACE", "agent-sandbox")
-IMAGE = env("SANDBOX_IMAGE", "ghcr.io/duyetbot/claude-agent-runner:latest")
+IMAGE = env("SANDBOX_IMAGE", "ghcr.io/duyet/claude-agent-runner:latest")
 IMAGE_PULL_POLICY = env("SANDBOX_IMAGE_PULL_POLICY", "Always")
 CPU_REQUEST = env("SANDBOX_CPU_REQUEST", "200m")
 MEM_REQUEST = env("SANDBOX_MEM_REQUEST", "512Mi")
@@ -26,6 +26,7 @@ RUN_AS_GROUP = int(env("SANDBOX_RUN_AS_GROUP", "1000"))
 RESTART_POLICY = env("SANDBOX_RESTART_POLICY", "Never")
 CONTAINER_NAME = env("SANDBOX_CONTAINER_NAME", "agent")
 CONTAINER_COMMAND = env("SANDBOX_CONTAINER_COMMAND", "python -m app.agent")
+CONTAINER_ARGS = env("SANDBOX_CONTAINER_ARGS", "")
 CONTAINER_WORKDIR = env("SANDBOX_CONTAINER_WORKDIR", "/workspace")
 SECRET_REF_NAME = env("SANDBOX_SECRET_REF", "claude-agent-runner-secret")
 CONFIGMAP_REF_NAME = env("SANDBOX_CONFIGMAP_REF", "claude-agent-runner-config")
@@ -58,6 +59,7 @@ def _pod_template(task: dict, task_b64: str) -> dict:
                 "image": IMAGE,
                 "imagePullPolicy": IMAGE_PULL_POLICY,
                 "command": CONTAINER_COMMAND.split(),
+                "args": CONTAINER_ARGS.split() if CONTAINER_ARGS else None,
                 "workingDir": CONTAINER_WORKDIR,
                 "envFrom": [
                     {"secretRef": {"name": SECRET_REF_NAME}},
