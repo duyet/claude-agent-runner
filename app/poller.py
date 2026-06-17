@@ -115,6 +115,14 @@ class GitHubPoller:
         self.last_poll_times: dict[str, float] = {}  # repo_full -> timestamp
         self.rate_limit_reset: float = 0
         self.remaining_requests: int = 5000  # GitHub default for authenticated
+        # Per-cycle counters, reset at the start of each _poll_once
+        self.stats: dict[str, int] = {
+            "issues_fetched": 0,
+            "prs_fetched": 0,
+            "items_skipped": 0,
+            "sandboxes_created": 0,
+            "errors": 0,
+        }
 
     @property
     def state_mgr(self) -> StateManager:
@@ -142,15 +150,26 @@ class GitHubPoller:
         self._ensure_github_client()
 
         # Start polling loop
+        cycle = 0
         while True:
+            cycle += 1
+            started = time.time()
             try:
-                await self._poll_once()
+                await self._poll_once(cycle)
             except Exception as e:
-                log.error(f"Poll failed: {e}")
+                log.error(f"Poll cycle #{cycle} failed: {e}")
 
+            elapsed = time.time() - started
             # Wait for next interval (or shorter if rate limited)
             wait_time = self._get_wait_time()
-            log.debug(f"Waiting {wait_time/60:.1f} minutes until next poll")
+            log.info(
+                f"Cycle #{cycle} done in {elapsed:.1f}s | "
+                f"created={self.stats['sandboxes_created']} "
+                f"skipped={self.stats['items_skipped']} "
+                f"errors={self.stats['errors']} | "
+                f"rate_limit={self.remaining_requests} remaining | "
+                f"next poll in {wait_time/60:.1f}m"
+            )
             await asyncio.sleep(wait_time)
 
     def _get_wait_time(self) -> float:
@@ -165,18 +184,27 @@ class GitHubPoller:
         # Normal interval
         return INTERVAL_MINUTES * 60
 
-    async def _poll_once(self) -> None:
+    async def _poll_once(self, cycle: int = 0) -> None:
         """Poll all configured repos once."""
-        log.info(f"Polling {len(REPOS)} repos...")
+        # Reset per-cycle counters
+        for k in self.stats:
+            self.stats[k] = 0
+
+        log.info(
+            f"Cycle #{cycle}: polling {len(REPOS)} repos {REPOS} | "
+            f"events={EVENT_TYPES} | cache={len(self.processed.cache)} tracked items"
+        )
 
         for repo in REPOS:
             try:
                 await self._poll_repo(repo)
             except Exception as e:
+                self.stats["errors"] += 1
                 log.error(f"Failed to poll {repo}: {e}")
 
     async def _poll_repo(self, repo_full: str) -> None:
         """Poll a single repo for events."""
+        repo_started = time.time()
         # Refresh auth before each poll. App installation tokens expire after ~1h,
         # so a client built once at startup eventually returns 401 Bad credentials.
         self._refresh_github_client(repo_full)
@@ -188,6 +216,7 @@ class GitHubPoller:
         try:
             repo = self.github.get_repo(repo_full)
         except GithubException as e:
+            self.stats["errors"] += 1
             log.error(f"Failed to get repo {repo_full}: {e}")
             return
 
@@ -197,6 +226,11 @@ class GitHubPoller:
         # Get last poll time for this repo
         last_poll = self.last_poll_times.get(repo_full, 0)
         since_time = datetime.fromtimestamp(last_poll) if last_poll > 0 else None
+        since_desc = since_time.isoformat() if since_time else "beginning (first poll)"
+        log.info(f"Polling {repo_full} (since {since_desc})")
+
+        issues_before = self.stats["issues_fetched"]
+        prs_before = self.stats["prs_fetched"]
 
         # Check for new issues
         if "issues" in EVENT_TYPES:
@@ -208,6 +242,12 @@ class GitHubPoller:
 
         # Update last poll time
         self.last_poll_times[repo_full] = time.time()
+
+        log.info(
+            f"Polled {repo_full} in {time.time() - repo_started:.1f}s | "
+            f"issues_scanned={self.stats['issues_fetched'] - issues_before} "
+            f"prs_scanned={self.stats['prs_fetched'] - prs_before}"
+        )
 
     async def _check_new_issues(self, repo_full: str, repo, since_time: datetime | None) -> None:
         """Check for newly opened issues since last poll."""
@@ -227,10 +267,15 @@ class GitHubPoller:
             # Paginate through issues (PyGithub handles this automatically)
             issues = repo.get_issues(**kwargs)
 
+            scanned = 0
+            skipped_prs = 0
             processed_count = 0
             for issue in issues:
+                scanned += 1
+                self.stats["issues_fetched"] += 1
                 # Skip pull requests (they're handled separately)
                 if issue.pull_request is not None:
+                    skipped_prs += 1
                     continue
 
                 # Stop if we've seen this issue before
@@ -247,10 +292,13 @@ class GitHubPoller:
                     log.warning("Hit safety limit of 50 issues per poll cycle")
                     break
 
-            if processed_count > 0:
-                log.info(f"Processed {processed_count} new issues from {repo_full}")
+            log.info(
+                f"Issues from {repo_full}: scanned={scanned} "
+                f"skipped_prs={skipped_prs} new_processed={processed_count}"
+            )
 
         except GithubException as e:
+            self.stats["errors"] += 1
             log.error(f"GitHub API error fetching new issues: {e}")
 
     async def _process_new_issue(self, repo_full: str, repo, issue: PyGithubIssue) -> None:
@@ -266,7 +314,8 @@ class GitHubPoller:
         # Check if user is allowed
         sender = issue.user.login if issue.user else ""
         if ALLOWED_USERS and not self._is_allowed(sender):
-            log.debug(f"Skipping issue {number} by disallowed user {sender}")
+            self.stats["items_skipped"] += 1
+            log.info(f"Skipping issue {number} by disallowed user {sender}")
             return
 
         log.info(f"Found new issue: {repo_full}#{number} by {sender} - {issue.title[:50]}")
@@ -292,8 +341,10 @@ class GitHubPoller:
         try:
             sandbox_name = k8shelper.create_sandbox(task)
             self.processed.put(key, ProcessedItem("issue", repo_full, number, time.time(), sandbox_name))
-            log.info(f"Created sandbox {sandbox_name} for new issue {number}")
+            self.stats["sandboxes_created"] += 1
+            log.info(f"Created sandbox {sandbox_name} for new issue {repo_full}#{number}")
         except Exception as e:
+            self.stats["errors"] += 1
             log.error(f"Failed to create sandbox for issue {number}: {e}")
 
     async def _check_pull_requests(self, repo_full: str, repo, since_time: datetime | None) -> None:
@@ -305,8 +356,11 @@ class GitHubPoller:
             # get_pulls() has no `since` param — filter by created_at manually
             prs = repo.get_pulls(**kwargs)
 
+            scanned = 0
             processed_count = 0
             for pr in prs:
+                scanned += 1
+                self.stats["prs_fetched"] += 1
                 # Stop if PR was created before our cutoff
                 if cutoff and pr.created_at.replace(tzinfo=None) < cutoff:
                     break
@@ -324,10 +378,12 @@ class GitHubPoller:
                     log.warning("Hit safety limit of 20 PRs per poll cycle")
                     break
 
-            if processed_count > 0:
-                log.info(f"Processed {processed_count} new PRs from {repo_full}")
+            log.info(
+                f"PRs from {repo_full}: scanned={scanned} new_processed={processed_count}"
+            )
 
         except GithubException as e:
+            self.stats["errors"] += 1
             log.error(f"GitHub API error fetching PRs: {e}")
 
     async def _process_pull_request(self, repo_full: str, pr: PyGithubPR) -> None:
@@ -343,7 +399,8 @@ class GitHubPoller:
         # Check if user is allowed
         sender = pr.user.login if pr.user else ""
         if ALLOWED_USERS and not self._is_allowed(sender):
-            log.debug(f"Skipping PR {number} by disallowed user {sender}")
+            self.stats["items_skipped"] += 1
+            log.info(f"Skipping PR {number} by disallowed user {sender}")
             return
 
         log.info(f"Found new PR: {repo_full}#{number} by {sender} - {pr.title[:50]}")
@@ -369,8 +426,10 @@ class GitHubPoller:
         try:
             sandbox_name = k8shelper.create_sandbox(task)
             self.processed.put(key, ProcessedItem("pr", repo_full, number, time.time(), sandbox_name))
-            log.info(f"Created sandbox {sandbox_name} for PR {number}")
+            self.stats["sandboxes_created"] += 1
+            log.info(f"Created sandbox {sandbox_name} for PR {repo_full}#{number}")
         except Exception as e:
+            self.stats["errors"] += 1
             log.error(f"Failed to create sandbox for PR {number}: {e}")
 
     def _is_allowed(self, sender: str) -> bool:
@@ -392,7 +451,11 @@ class GitHubPoller:
             if core:
                 self.remaining_requests = core.remaining
                 self.rate_limit_reset = core.reset.timestamp()
-                log.debug(f"Rate limit: {self.remaining_requests} requests remaining, resets at {datetime.fromtimestamp(self.rate_limit_reset)}")
+                used = getattr(core, "limit", 0) - self.remaining_requests
+                log.info(
+                    f"Rate limit: {self.remaining_requests}/{getattr(core, 'limit', '?')} remaining "
+                    f"({used} used), resets at {datetime.fromtimestamp(self.rate_limit_reset)}"
+                )
         except Exception as e:
             log.debug(f"Failed to get rate limit info: {e}")
 
