@@ -67,3 +67,6 @@ dist/
 # Kubernetes
 *.kubeconfig
 kubeconfig
+
+# Claude Code agent worktrees (transient, auto-cleaned)
+.claude/worktrees/

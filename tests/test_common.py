@@ -22,6 +22,49 @@ def test_env_required_raises_when_absent(monkeypatch):
         common.env("REQUIRED", required=True)
 
 
+def test_slugify_lowercases_and_collapses():
+    assert common.slugify("Duyet/Infra") == "duyet-infra"
+    assert common.slugify("a_b.c") == "a-b-c"
+    assert common.slugify("--Trim--") == "trim"
+
+
+def test_sandbox_name_shape_and_length():
+    name = common.sandbox_name("duyet/infra", 42)
+    assert name.startswith("fix-duyet-infra-42-")
+    assert len(name) <= 58
+
+
+def test_user_allowed_empty_allowlist_permits_all():
+    assert common.user_allowed("anyone", set()) is True
+
+
+def test_user_allowed_matches_login_and_bot_suffix():
+    allowed = {"duyet"}
+    assert common.user_allowed("duyet", allowed) is True
+    assert common.user_allowed("Duyet", allowed) is True  # case-insensitive
+    assert common.user_allowed("duyet[bot]", allowed) is True  # bot suffix stripped
+    assert common.user_allowed("stranger", allowed) is False
+
+
+def test_build_task_defaults_and_overrides():
+    task = common.build_task(
+        repo_full="duyet/infra",
+        number=7,
+        title="t",
+        body=None,
+        sender="duyet",
+        reason="because",
+    )
+    assert task["repo_full"] == "duyet/infra"
+    assert task["number"] == 7
+    assert task["body"] == ""  # None coerced to empty string
+    assert task["default_branch"] == "main"
+    assert task["is_pr"] is False
+    assert task["instruction"] == ""
+    assert task["reason"] == "because"
+    assert task["sandbox_name"].startswith("fix-duyet-infra-7-")
+
+
 def test_get_logger_configures_once(monkeypatch):
     monkeypatch.setattr(common, "_configured", False)
     logging.getLogger().handlers.clear()

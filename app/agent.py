@@ -18,13 +18,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from . import gh_token, k8shelper, state
 from .common import env, get_logger, load_task
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 __all__ = ["main", "run_agent_sdk"]
 
@@ -58,6 +54,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Extra text appended to the system prompt",
     )
     return p.parse_args(argv)
+
+
+def _resolve_model(cli_args: argparse.Namespace | None = None) -> str:
+    """Resolve the model: CLI arg wins over ANTHROPIC_MODEL env, else the default."""
+    if cli_args and cli_args.model:
+        return cli_args.model
+    return env("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
+
+
+def _resolve_max_turns(cli_args: argparse.Namespace | None = None) -> int:
+    """Resolve max turns: CLI arg wins over CLAUDE_MAX_TURNS env, else the default."""
+    if cli_args and cli_args.max_turns:
+        return cli_args.max_turns
+    return int(env("CLAUDE_MAX_TURNS", "50"))
 
 
 def _build_system_prompt(cli_args: argparse.Namespace | None = None) -> str:
@@ -137,16 +147,8 @@ def main() -> None:
     remote = gh_token.git_remote(repo_full, token)
 
     # Create run record
-    model = (
-        cli_args.model
-        if cli_args and cli_args.model
-        else env("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
-    )
-    max_turns = (
-        cli_args.max_turns
-        if cli_args and cli_args.max_turns
-        else int(env("CLAUDE_MAX_TURNS", "50"))
-    )
+    model = _resolve_model(cli_args)
+    max_turns = _resolve_max_turns(cli_args)
 
     run = st.create_run(
         sandbox_name=task["sandbox_name"],
@@ -279,16 +281,8 @@ async def run_agent_sdk(
 
     system_prompt = _build_system_prompt(cli_args)
 
-    model = (
-        cli_args.model
-        if cli_args and cli_args.model
-        else env("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
-    )
-    max_turns = (
-        cli_args.max_turns
-        if cli_args and cli_args.max_turns
-        else int(env("CLAUDE_MAX_TURNS", "50"))
-    )
+    model = _resolve_model(cli_args)
+    max_turns = _resolve_max_turns(cli_args)
 
     opts = ClaudeAgentOptions(
         cwd=str(WORKDIR),

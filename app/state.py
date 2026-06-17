@@ -62,16 +62,13 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from .common import env, get_logger
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 __all__ = [
     "get_state",
@@ -497,7 +494,7 @@ class FileStorage(StorageBackendABC):
         Returns:
             Path to run JSON file
         """
-        date = datetime.utcnow().strftime("%Y/%m/%d")
+        date = datetime.now(timezone.utc).strftime("%Y/%m/%d")
         path = self.runs_dir / date / f"{run_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
@@ -511,7 +508,7 @@ class FileStorage(StorageBackendABC):
         Returns:
             Path to compressed session file
         """
-        date = datetime.utcnow().strftime("%Y/%m/%d")
+        date = datetime.now(timezone.utc).strftime("%Y/%m/%d")
         path = self.sessions_dir / date / f"{session_id}.json.gz"
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
@@ -833,12 +830,13 @@ class StateManager:
             log.info("Cleanup only supported for file backend")
             return 0
 
-        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         deleted = 0
 
         for path in self.storage.runs_dir.rglob("*.json"):
             try:
-                if datetime.fromtimestamp(path.stat().st_mtime) < cutoff:
+                mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+                if mtime < cutoff:
                     path.unlink()
                     deleted += 1
             except OSError:
@@ -852,9 +850,9 @@ def _utc_now() -> str:
     """Get current UTC timestamp in ISO format.
 
     Returns:
-        ISO 8601 timestamp string
+        ISO 8601 timestamp string (timezone-aware, UTC)
     """
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 # Global state manager instance

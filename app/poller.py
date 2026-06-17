@@ -7,13 +7,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from github import Github, GithubException
+from github import Auth, Github, GithubException
 from github.Issue import Issue as PyGithubIssue
 from github.PullRequest import PullRequest as PyGithubPR
 
 from . import gh_token, k8shelper
-from .common import get_logger
+from .common import build_task, get_logger, user_allowed
 from .state import StateManager, Trigger
+
+
+def _github_client(token: str | None) -> Github:
+    """Build a PyGithub client, using token auth when a token is supplied."""
+    return Github(auth=Auth.Token(token)) if token else Github()
 
 log = get_logger("poller")
 
@@ -315,29 +320,23 @@ class GitHubPoller:
 
         # Check if user is allowed
         sender = issue.user.login if issue.user else ""
-        if ALLOWED_USERS and not self._is_allowed(sender):
+        if not user_allowed(sender, ALLOWED_USERS):
             self.stats["items_skipped"] += 1
             log.info(f"Skipping issue {number} by disallowed user {sender}")
             return
 
         log.info(f"Found new issue: {repo_full}#{number} by {sender} - {issue.title[:50]}")
 
-        # Create task
-        ts = int(time.time())
-        safe = "".join(c.lower() if c.isalnum() else "-" for c in repo_full).strip("-")
-        task = {
-            "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
-            "repo_full": repo_full,
-            "clone_url": repo.clone_url,
-            "default_branch": repo.default_branch,
-            "number": number,
-            "title": issue.title,
-            "body": issue.body or "",
-            "instruction": "",
-            "sender": sender,
-            "is_pr": False,
-            "reason": f"new issue opened by {sender}",
-        }
+        task = build_task(
+            repo_full=repo_full,
+            number=number,
+            title=issue.title,
+            body=issue.body,
+            sender=sender,
+            reason=f"new issue opened by {sender}",
+            default_branch=repo.default_branch,
+            clone_url=repo.clone_url,
+        )
 
         # Create Sandbox CR
         try:
@@ -401,29 +400,24 @@ class GitHubPoller:
 
         # Check if user is allowed
         sender = pr.user.login if pr.user else ""
-        if ALLOWED_USERS and not self._is_allowed(sender):
+        if not user_allowed(sender, ALLOWED_USERS):
             self.stats["items_skipped"] += 1
             log.info(f"Skipping PR {number} by disallowed user {sender}")
             return
 
         log.info(f"Found new PR: {repo_full}#{number} by {sender} - {pr.title[:50]}")
 
-        # Create task
-        ts = int(time.time())
-        safe = "".join(c.lower() if c.isalnum() else "-" for c in repo_full).strip("-")
-        task = {
-            "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
-            "repo_full": repo_full,
-            "clone_url": pr.base.repo.clone_url,
-            "default_branch": pr.base.repo.default_branch,
-            "number": number,
-            "title": pr.title,
-            "body": pr.body or "",
-            "instruction": "",
-            "sender": sender,
-            "is_pr": True,
-            "reason": f"PR opened by {sender}",
-        }
+        task = build_task(
+            repo_full=repo_full,
+            number=number,
+            title=pr.title,
+            body=pr.body,
+            sender=sender,
+            reason=f"PR opened by {sender}",
+            default_branch=pr.base.repo.default_branch,
+            clone_url=pr.base.repo.clone_url,
+            is_pr=True,
+        )
 
         # Create Sandbox CR
         try:
@@ -435,13 +429,6 @@ class GitHubPoller:
         except Exception as e:
             self.stats["errors"] += 1
             log.error(f"Failed to create sandbox for PR {number}: {e}")
-
-    def _is_allowed(self, sender: str) -> bool:
-        """Check if sender is in allowed users list."""
-        if not ALLOWED_USERS:
-            return True
-        base = sender.lower().removesuffix("[bot]")
-        return sender.lower() in ALLOWED_USERS or base in ALLOWED_USERS
 
     def _update_rate_limit_info(self) -> None:
         """Update rate limit information from GitHub client."""
@@ -474,12 +461,12 @@ class GitHubPoller:
 
         # Fall back to personal access token
         if GH_TOKEN:
-            self.github = Github(GH_TOKEN)
+            self.github = _github_client(GH_TOKEN)
             log.info("Initialized GitHub client with personal access token")
             return
 
         # No authentication - will have limited rate limits
-        self.github = Github()
+        self.github = _github_client(None)
         log.warning("Initialized GitHub client without authentication (limited rate limits)")
 
     def _refresh_github_client(self, repo_full: str) -> None:
@@ -498,7 +485,7 @@ class GitHubPoller:
             return
 
         if token != self._gh_token:
-            self.github = Github(token)
+            self.github = _github_client(token)
             self._gh_token = token
             log.info("Refreshed GitHub client with App installation token")
 
