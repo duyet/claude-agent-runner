@@ -14,6 +14,7 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "pyjwt[crypto]>=2.8",
     "PyGithub>=2.3",
+    "python-gitlab>=4.0",
     "pyyaml>=6.0",
 ]
 

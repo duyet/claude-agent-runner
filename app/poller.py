@@ -553,3 +553,11 @@ async def start_poller():
     """Start the poller in the background."""
     if ENABLED:
         asyncio.create_task(poller.start())
+
+    # Also start the GitLab poller, lazily and guarded so a missing
+    # python-gitlab dependency never breaks the GitHub poller path.
+    try:
+        from .gl_poller import start_gl_poller
+        await start_gl_poller()
+    except Exception as e:  # pragma: no cover
+        log.warning("GitLab poller not started: %s", e)
