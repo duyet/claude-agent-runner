@@ -2,6 +2,8 @@
 
 General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) runner for Kubernetes. Receives webhook triggers, spawns ephemeral sandbox pods, and lets the agent work autonomously.
 
+Works with both **GitHub** and **GitLab** as co-equal providers — each task carries a `provider` field (`github` | `gitlab`) that selects token acquisition, clone URL, agent prompt wording, and the comment API. GitHub agents open Pull Requests; GitLab agents open Merge Requests.
+
 ## How It Works
 
 ### Architecture Design
@@ -10,7 +12,7 @@ General-purpose [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/ove
 
 **Core Components:**
 
-**⚙️ Receiver Service** — Long-running `claude-agent-runner` FastAPI pod with `/webhook/github` and `/webhook/custom` endpoints that calls Kubernetes API to create Sandbox CRs
+**⚙️ Receiver Service** — Long-running `claude-agent-runner` FastAPI pod with `/webhook/github`, `/webhook/gitlab`, and `/webhook/custom` endpoints that calls Kubernetes API to create Sandbox CRs
 
 **🤖 Agent Pod** — Ephemeral sandbox with core components:
 - **Claude Agent SDK** — Tool execution (Read, Write, Edit, Bash, GitHub, WebSearch, WebFetch, Glob, Grep)
@@ -127,6 +129,15 @@ Authentication with GitHub — choose either a **GitHub App** (fine-grained, rec
 
 Set `GH_TOKEN` instead of `GH_APP_ID` + `GH_PRIVATE_KEY` for simpler setup. The agent uses whichever is provided.
 
+**GitLab** (used when a task's `provider` is `gitlab`):
+| Variable | Source | Purpose |
+|---|---|---|
+| `GITLAB_TOKEN` | GitLab → Personal/Group/Project access token | Clone (`oauth2:<token>`), open Merge Requests, post notes |
+| `GITLAB_URL` | — | API/host base; default `https://gitlab.com`, set for self-hosted |
+| `GITLAB_WEBHOOK_SECRET` | Your own secret | `X-Gitlab-Token` header verification (plain compare, not HMAC) |
+
+GitLab uses a single static token (no App/installation-token equivalent). See [docs/configuration.md](docs/configuration.md) for the full env reference.
+
 ### Authentication
 
 The agent sandbox needs API credentials. Set these via Kubernetes Secret:
@@ -205,7 +216,16 @@ MCP_SERVERS: '{"playwright": {"command": "npx", "args": ["@playwright/mcp@latest
 
 ### `POST /api/v1/webhook/github` (also `/webhook/github` for backward compatibility)
 
-GitHub webhook receiver. Verifies HMAC-SHA256, handles `issue_comment` with trigger phrase (default: `/fix`). Creates a Sandbox CR for matching comments.
+GitHub webhook receiver. Verifies HMAC-SHA256 (`X-Hub-Signature-256`), handles `issue_comment` with trigger phrase (default: `/fix`). Creates a Sandbox CR (`provider=github`) for matching comments.
+
+### `POST /api/v1/webhook/gitlab` (also `/webhook/gitlab`)
+
+GitLab webhook receiver. Verifies the plain `X-Gitlab-Token` header against `GITLAB_WEBHOOK_SECRET` (a shared secret, **not** HMAC). Dispatches on the `X-Gitlab-Event` header:
+
+- **`Note Hook`** — a comment containing the trigger phrase on an Issue or Merge Request
+- **`Issue Hook`** — an issue opened with the configured label
+
+Creates a Sandbox CR (`provider=gitlab`); the agent opens a Merge Request. Works against `gitlab.com` or self-hosted via `GITLAB_URL`.
 
 ### `POST /api/v1/webhook/custom` (also `/webhook/custom`)
 
@@ -239,6 +259,16 @@ Enable pull mode with environment variables:
 | `PULL_MODE_INTERVAL_MINUTES` | `5` | Polling interval in minutes |
 | `PULL_MODE_REPOS` | `""` | Comma-separated repos to poll (e.g., `duyet/infra,duyet/charts`) |
 | `PULL_MODE_EVENTS` | `issues,issue_comments` | Event types: `issues`, `issue_comments`, `prs` |
+
+A parallel **GitLab poller** (built on [`python-gitlab`](https://python-gitlab.readthedocs.io)) provides the same pull-based path for GitLab projects without a public webhook endpoint:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PULL_MODE_GITLAB_ENABLED` | `false` | Enable GitLab API polling mode |
+| `PULL_MODE_GITLAB_PROJECTS` | `""` | Comma-separated GitLab project paths to poll |
+| `PULL_MODE_GITLAB_EVENTS` | `issues,merge_requests` | Event types to poll: issues, merge requests |
+
+It polls against `GITLAB_URL` using `GITLAB_TOKEN` and creates Sandbox CRs with `provider=gitlab`. See [docs/configuration.md](docs/configuration.md) for the full reference.
 
 ### How Pull Mode Works
 
