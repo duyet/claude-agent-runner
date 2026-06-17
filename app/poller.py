@@ -11,7 +11,7 @@ from github import Github, GithubException
 from github.Issue import Issue as PyGithubIssue
 from github.PullRequest import PullRequest as PyGithubPR
 
-from . import k8shelper
+from . import gh_token, k8shelper
 from .common import get_logger
 from .state import StateManager, AgentRun
 
@@ -111,6 +111,7 @@ class GitHubPoller:
         self._state_mgr: StateManager | None = None
         self.processed = LRUCache()
         self.github: Github | None = None
+        self._gh_token: str | None = None  # current App installation token (for rotation)
         self.last_poll_times: dict[str, float] = {}  # repo_full -> timestamp
         self.rate_limit_reset: float = 0
         self.remaining_requests: int = 5000  # GitHub default for authenticated
@@ -176,6 +177,10 @@ class GitHubPoller:
 
     async def _poll_repo(self, repo_full: str) -> None:
         """Poll a single repo for events."""
+        # Refresh auth before each poll. App installation tokens expire after ~1h,
+        # so a client built once at startup eventually returns 401 Bad credentials.
+        self._refresh_github_client(repo_full)
+
         if not self.github:
             log.warning("GitHub client not initialized")
             return
@@ -393,28 +398,12 @@ class GitHubPoller:
 
     def _ensure_github_client(self) -> None:
         """Ensure GitHub client is initialized with valid authentication."""
-        if self.github is not None:
+        # App auth is repo-scoped and token-expiry-aware; defer to per-poll refresh.
+        if GH_APP_ID and GH_PRIVATE_KEY:
             return
 
-        # Use GitHub App authentication if available
-        if GH_APP_ID and GH_PRIVATE_KEY:
-            try:
-                from github import GithubIntegration
-
-                # GithubIntegration handles JWT creation internally (iss as int)
-                integration = GithubIntegration(
-                    integration_id=int(GH_APP_ID),
-                    private_key=GH_PRIVATE_KEY,
-                )
-                installations = integration.get_installations()
-                if installations:
-                    installation_id = installations[0].id
-                    token = integration.get_access_token(installation_id)
-                    self.github = Github(token.token)
-                    log.info("Initialized GitHub client with App authentication")
-                    return
-            except Exception as e:
-                log.error(f"Failed to initialize GitHub App authentication: {e}")
+        if self.github is not None:
+            return
 
         # Fall back to personal access token
         if GH_TOKEN:
@@ -425,6 +414,26 @@ class GitHubPoller:
         # No authentication - will have limited rate limits
         self.github = Github()
         log.warning("Initialized GitHub client without authentication (limited rate limits)")
+
+    def _refresh_github_client(self, repo_full: str) -> None:
+        """Rebuild the GitHub client with a fresh App installation token when needed.
+
+        gh_token.token_for caches per-repo and refreshes 5 min before expiry, so the
+        returned token is always valid. We only rebuild the client when the token rotates.
+        """
+        if not (GH_APP_ID and GH_PRIVATE_KEY):
+            return  # PAT / unauthenticated client built once in _ensure_github_client
+
+        try:
+            token = gh_token.token_for(repo_full)
+        except Exception as e:
+            log.error(f"Failed to mint GitHub App token for {repo_full}: {e}")
+            return
+
+        if token != self._gh_token:
+            self.github = Github(token)
+            self._gh_token = token
+            log.info("Refreshed GitHub client with App installation token")
 
     async def _load_processed(self) -> None:
         """Load processed items from state manager."""
