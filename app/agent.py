@@ -39,7 +39,8 @@ DEFAULT_SYSTEM_PROMPT = """You are an autonomous coding agent.
 Report concisely: what you found, what you changed, the result."""
 
 _RELEVANT_ENV_PREFIXES = (
-    "ANTHROPIC_", "CLAUDE_", "ANYROUTER_", "GIT_", "GH_", "SKILLS_", "MCP_"
+    "ANTHROPIC_", "CLAUDE_", "ANYROUTER_", "GIT_", "GH_", "GITLAB_", "GL_",
+    "SKILLS_", "MCP_",
 )
 
 
@@ -109,6 +110,25 @@ def _build_plugins() -> list[dict]:
     return plugins
 
 
+def _resolve_remote(provider: str, repo_full: str) -> tuple[str, str]:
+    """Resolve the auth token and authenticated clone URL for the given provider.
+
+    GitLab support is added alongside GitHub. The GitLab token module is a
+    sibling unit that may not exist on every branch, so it is imported lazily
+    inside the GitLab branch only — keeping this module importable on its own.
+    """
+    if provider == "gitlab":
+        from . import gl_token  # lazy: sibling unit, gitlab-only path
+
+        token = gl_token.token_for(repo_full)
+        remote = gl_token.git_remote(repo_full, token)
+        return token, remote
+
+    token = gh_token.token_for(repo_full)
+    remote = gh_token.git_remote(repo_full, token)
+    return token, remote
+
+
 def main() -> None:
     """Main entry point for the agent runner.
 
@@ -143,8 +163,8 @@ def main() -> None:
     )
 
     repo_full = task["repo_full"]
-    token = gh_token.token_for(repo_full)
-    remote = gh_token.git_remote(repo_full, token)
+    provider = task.get("provider", "github")
+    token, remote = _resolve_remote(provider, repo_full)
 
     # Create run record
     model = _resolve_model(cli_args)
@@ -184,8 +204,11 @@ def main() -> None:
         k8shelper.delete_sandbox(task["sandbox_name"])
         sys.exit(1)
 
-    os.environ["GH_TOKEN"] = token
-    os.environ["GITHUB_TOKEN"] = token
+    if provider == "gitlab":
+        os.environ["GITLAB_TOKEN"] = token
+    else:
+        os.environ["GH_TOKEN"] = token
+        os.environ["GITHUB_TOKEN"] = token
 
     os.environ["GIT_AUTHOR_NAME"] = env("GIT_AUTHOR_NAME", "agent")
     os.environ["GIT_AUTHOR_EMAIL"] = env("GIT_AUTHOR_EMAIL", "agent@localhost")
@@ -223,6 +246,7 @@ def _post_failure_comment(task: dict, token: str, reason: str) -> None:
     """
     number = task.get("number", 0)
     repo_full = task.get("repo_full", "")
+    provider = task.get("provider", "github")
     if not number or task.get("is_pr"):
         return
     model = env("ANTHROPIC_MODEL", "unknown")
@@ -238,13 +262,27 @@ def _post_failure_comment(task: dict, token: str, reason: str) -> None:
     try:
         import httpx
 
-        r = httpx.post(
-            f"https://api.github.com/repos/{repo_full}/issues/{number}/comments",
-            headers={
+        if provider == "gitlab":
+            from urllib.parse import quote_plus
+
+            from . import gl_token  # lazy: sibling unit, gitlab-only path
+
+            url = (
+                f"{gl_token.api_base()}/projects/{quote_plus(repo_full)}"
+                f"/issues/{number}/notes"
+            )
+            headers = gl_token.api_headers(token)
+        else:
+            url = f"https://api.github.com/repos/{repo_full}/issues/{number}/comments"
+            headers = {
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
-            },
+            }
+
+        r = httpx.post(
+            url,
+            headers=headers,
             json={"body": body},
             timeout=20,
         )
@@ -415,6 +453,47 @@ def _prompt(task: dict) -> str:
     body = task.get("body", "")
     number = task.get("number", 0)
     reason = task.get("reason", "")
+    provider = task.get("provider", "github")
+
+    if provider == "gitlab":
+        # Real GitLab issue — reference it
+        if number and number < 1000000:
+            return f"""Respond to GitLab issue #{number} in the cloned repo at the current working directory.
+
+Title: {title}
+
+Description:
+{body}{extra}
+
+Steps:
+1. Explore the codebase to understand what the issue is asking for.
+2. Decide whether the issue requires a code change:
+   - If YES: make minimal, correct changes; run tests if they exist and verify they pass;
+     commit{(' (co-authored with ' + co_author + ')') if co_author else ''}; push to a new branch;
+     open a merge request, then comment on issue #{number} linking the merge request.
+   - If NO code change is needed (e.g. a question, greeting, or discussion): do not invent changes.
+3. ALWAYS post a comment on issue #{number} reporting what you found and did, using:
+   `glab issue note {number} --repo <group/project> --message "<your message>"`
+   (or the GitLab API). This is mandatory — the requester must get a reply on the
+   issue even when no code changed."""
+
+        # Custom / API trigger — describe the task directly
+        header = f"Reason: {reason}" if reason else ""
+        return f"""You are working on the cloned repo at the current working directory.
+
+{header}
+Title: {title}
+
+Description:
+{body}{extra}
+
+Steps:
+1. Explore the codebase to understand the context.
+2. Make minimal, correct changes.
+3. If tests exist, run them and verify they pass.
+4. Commit your changes.{co_author_line}
+5. Push to a new branch.
+6. Open a merge request using the `glab` CLI or the GitLab API."""
 
     # Real GitHub issue — reference it
     if number and number < 1000000:
