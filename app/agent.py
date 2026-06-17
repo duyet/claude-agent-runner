@@ -362,7 +362,7 @@ def _prompt(task: dict) -> str:
 
     # Real GitHub issue — reference it
     if number and number < 1000000:
-        return f"""Fix GitHub issue/PR #{number} in the cloned repo at the current working directory.
+        return f"""Respond to GitHub issue #{number} in the cloned repo at the current working directory.
 
 Title: {title}
 
@@ -370,12 +370,15 @@ Description:
 {body}{extra}
 
 Steps:
-1. Explore the codebase to understand the issue.
-2. Make minimal, correct changes.
-3. If tests exist, run them and verify they pass.
-4. Commit your changes.{co_author_line}
-5. Push to a new branch.
-6. Create a pull request using the GitHub tool."""
+1. Explore the codebase to understand what the issue is asking for.
+2. Decide whether the issue requires a code change:
+   - If YES: make minimal, correct changes; run tests if they exist and verify they pass;
+     commit{(' (co-authored with ' + co_author + ')') if co_author else ''}; push to a new branch;
+     open a pull request with the GitHub tool, then comment on issue #{number} linking the PR.
+   - If NO code change is needed (e.g. a question, greeting, or discussion): do not invent changes.
+3. ALWAYS post a comment on issue #{number} reporting what you found and did, using:
+   `gh issue comment {number} --repo <owner/repo> --body "<your message>"`
+   This is mandatory — the requester must get a reply on the issue even when no code changed."""
 
     # Custom / API trigger — describe the task directly
     header = f"Reason: {reason}" if reason else ""
