@@ -18,10 +18,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = []
+dev = ["pytest>=8.0"]
 
 [dependency-groups]
-dev = []
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

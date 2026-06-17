@@ -13,7 +13,7 @@ from github.PullRequest import PullRequest as PyGithubPR
 
 from . import gh_token, k8shelper
 from .common import get_logger
-from .state import StateManager, AgentRun
+from .state import StateManager
 
 log = get_logger("poller")
 

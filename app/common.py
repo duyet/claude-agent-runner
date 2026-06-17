@@ -5,20 +5,30 @@ import logging
 import os
 import sys
 
+# Aligned, readable format: "06:04:02.646 INFO     poller  message"
+_LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)-8s %(message)s"
+_LOG_DATEFMT = "%H:%M:%S"
+_configured = False
+
+
+def _configure_logging() -> None:
+    """Configure root logging once, unbuffered to stdout for live container logs."""
+    global _configured
+    if _configured:
+        return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    _configured = True
+
 
 def get_logger(name: str) -> logging.Logger:
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
-        force=True,
-    )
-    logger = logging.getLogger(name)
-    # Ensure all handlers flush immediately
-    for h in logger.handlers:
-        h.flush()
-    sys.stdout.flush()
-    return logger
+    _configure_logging()
+    return logging.getLogger(name)
 
 
 def env(key: str, default=None, required: bool = False):
