@@ -173,6 +173,7 @@ class RunResult:
     commits: list[str] = field(default_factory=list)
     pr_number: int = 0
     pr_url: str = ""
+    tool_uses: int = 0
 
 
 @dataclass

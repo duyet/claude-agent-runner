@@ -194,12 +194,64 @@ def main() -> None:
         result = asyncio.run(run_agent_sdk(_prompt(task), cli_args, session))
         st.update_run(run.run_id, status=state.RunStatus.COMPLETED, result=result)
         log.info("Run completed successfully")
+        # The agent finished but never executed a tool — it could not act on the
+        # issue (typically the configured model can't emit valid tool calls). Leave
+        # a diagnostic so the requester isn't met with silence.
+        if result.tool_uses == 0:
+            _post_failure_comment(
+                task, token,
+                f"completed {result.summary} but executed 0 tools — the model "
+                f"`{model}` did not produce any actionable tool calls",
+            )
     except Exception as exc:  # noqa: BLE001
         log.exception("agent run failed: %s", exc)
         st.update_run(run.run_id, status=state.RunStatus.FAILED, error=str(exc))
+        _post_failure_comment(task, token, f"failed: {exc}")
 
     k8shelper.delete_sandbox(task["sandbox_name"])
     log.info("done")
+
+
+def _post_failure_comment(task: dict, token: str, reason: str) -> None:
+    """Post a diagnostic comment when the agent can't respond via its own tools.
+
+    Runs at the Python layer (direct GitHub API), independent of the SDK tool
+    loop — so the requester still gets a response even when the model is broken.
+    Best-effort: never raises into the caller's cleanup path.
+    """
+    number = task.get("number", 0)
+    repo_full = task.get("repo_full", "")
+    if not number or task.get("is_pr"):
+        return
+    model = env("ANTHROPIC_MODEL", "unknown")
+    sandbox = task.get("sandbox_name", "")
+    body = (
+        f"🤖 **agent-runner**: this run {reason}.\n\n"
+        f"- model: `{model}`\n"
+        f"- sandbox: `{sandbox}`\n\n"
+        f"_No changes were made. This is an automated diagnostic so the issue "
+        f"isn't left without a response; a maintainer may need to check the "
+        f"runner's model configuration._"
+    )
+    try:
+        import httpx
+
+        r = httpx.post(
+            f"https://api.github.com/repos/{repo_full}/issues/{number}/comments",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={"body": body},
+            timeout=20,
+        )
+        if r.status_code >= 300:
+            log.error("fallback comment failed: %s %s", r.status_code, r.text[:200])
+        else:
+            log.info("posted fallback diagnostic comment on %s#%s", repo_full, number)
+    except Exception as exc:  # noqa: BLE001
+        log.error("fallback comment error: %s", exc)
 
 
 async def run_agent_sdk(
@@ -280,12 +332,21 @@ async def run_agent_sdk(
 
     st = state.get_state()
     turn_count = 0
+    tool_uses = 0
     files_changed: list[str] = []
     commits: list[str] = []
 
     async for msg in query(prompt=prompt, options=opts):
         mtype = type(msg).__name__
         turn_count += 1
+
+        # Count real tool invocations (ToolUseBlock in assistant content).
+        # A run with 0 tool uses means the model never executed anything —
+        # e.g. a non-Anthropic backend that can't emit valid Claude tool calls.
+        if hasattr(msg, "content") and isinstance(msg.content, list):
+            tool_uses += sum(
+                1 for b in msg.content if type(b).__name__ == "ToolUseBlock"
+            )
 
         # Track assistant messages in state
         if session and mtype in ("AssistantMessage", "ToolUseMessage"):
@@ -344,6 +405,7 @@ async def run_agent_sdk(
         summary=f"Completed {turn_count} turns",
         files_changed=list(set(files_changed)),
         commits=list(set(commits)),
+        tool_uses=tool_uses,
     )
 
 
