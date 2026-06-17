@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="claude-agent-runner webhook receiver", lifespan=lifespan)
 
 WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
+GITLAB_WEBHOOK_SECRET = os.environ.get("GITLAB_WEBHOOK_SECRET", "")
 API_KEY = os.environ.get("API_KEY", "")
 ALLOWED = {u.strip().lower() for u in os.environ.get("ALLOWED_USERS", "").split(",") if u.strip()}
 TRIGGER = os.environ.get("TRIGGER_PHRASE", "/fix").strip()
@@ -129,6 +130,105 @@ async def custom(request: Request):
     )
 
     return _accepted(k8shelper.create_sandbox(task))
+
+
+@app.post("/api/v1/webhook/gitlab")
+@app.post("/webhook/gitlab")
+async def gitlab(request: Request):
+    """GitLab webhook endpoint. Verifies the X-Gitlab-Token secret, handles notes/issues."""
+    token = request.headers.get("x-gitlab-token", "")
+    if not GITLAB_WEBHOOK_SECRET or not hmac.compare_digest(token, GITLAB_WEBHOOK_SECRET):
+        raise HTTPException(401, "invalid token")
+
+    event = request.headers.get("x-gitlab-event", "")
+    payload = json.loads(await request.body())
+
+    if event == "Note Hook":
+        task = _extract_gitlab_note(payload)
+    elif event == "Issue Hook" and ISSUE_LABEL:
+        task = _extract_gitlab_issue(payload)
+    else:
+        return {"ok": True, "skipped": True}
+
+    if task is None:
+        return {"ok": True, "skipped": True}
+
+    return _accepted(k8shelper.create_sandbox(task))
+
+
+def _extract_gitlab_note(p: dict) -> dict | None:
+    """Extract task from a GitLab Note Hook (comment) carrying the trigger phrase."""
+    attrs = p.get("object_attributes") or {}
+    comment = (attrs.get("note") or "").strip()
+    if not comment:
+        return None
+    first = comment.splitlines()[0].strip().lower()
+    if not first.startswith(TRIGGER.lower()):
+        return None
+
+    sender = (p.get("user") or {}).get("username", "")
+    if not user_allowed(sender, ALLOWED):
+        return None
+
+    noteable_type = attrs.get("noteable_type", "")
+    if noteable_type == "MergeRequest":
+        noteable = p.get("merge_request") or {}
+    else:
+        noteable = p.get("issue") or {}
+
+    project = p.get("project") or {}
+    return _build_gitlab_task(
+        project=project,
+        noteable=noteable,
+        sender=sender,
+        reason=f"{TRIGGER} by {sender}",
+        instruction=comment[len(TRIGGER):].strip(),
+        is_pr=(noteable_type == "MergeRequest"),
+    )
+
+
+def _extract_gitlab_issue(p: dict) -> dict | None:
+    """Extract task from a GitLab Issue Hook when opened with the target label."""
+    attrs = p.get("object_attributes") or {}
+    if attrs.get("action") != "open":
+        return None
+
+    labels = {(lbl.get("title") or "").strip().lower() for lbl in p.get("labels") or [] if lbl.get("title")}
+    if ISSUE_LABEL not in labels:
+        return None
+
+    sender = (p.get("user") or {}).get("username", "")
+    if not user_allowed(sender, ALLOWED):
+        return None
+
+    project = p.get("project") or {}
+    return _build_gitlab_task(
+        project=project,
+        noteable=attrs,
+        sender=sender,
+        reason=f"issue opened with label '{ISSUE_LABEL}'",
+        instruction="",
+        is_pr=False,
+    )
+
+
+def _build_gitlab_task(*, project: dict, noteable: dict, sender: str, reason: str,
+                       instruction: str, is_pr: bool) -> dict:
+    """Assemble a provider-tagged task from GitLab project + noteable objects."""
+    task = build_task(
+        repo_full=project.get("path_with_namespace", ""),
+        number=noteable.get("iid"),
+        title=noteable.get("title", ""),
+        body=noteable.get("description", ""),
+        sender=sender,
+        reason=reason,
+        default_branch=project.get("default_branch", "main"),
+        clone_url=project.get("git_http_url", ""),
+        instruction=instruction,
+        is_pr=is_pr,
+    )
+    task["provider"] = "gitlab"
+    return task
 
 
 def _extract_issue(p: dict) -> dict | None:
