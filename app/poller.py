@@ -13,7 +13,7 @@ from github.PullRequest import PullRequest as PyGithubPR
 
 from . import gh_token, k8shelper
 from .common import get_logger
-from .state import StateManager
+from .state import StateManager, Trigger
 
 log = get_logger("poller")
 
@@ -30,8 +30,10 @@ GH_APP_ID = os.environ.get("GH_APP_ID")
 GH_PRIVATE_KEY = os.environ.get("GH_PRIVATE_KEY")
 GH_TOKEN = os.environ.get("GH_TOKEN")
 
-# Rate limiting and caching
-PROCESSED_CACHE_TTL = 3600  # Keep processed items for 1 hour
+# Rate limiting and caching.
+# TTL matches state retention so dedup survives receiver restarts (the in-memory cache is
+# repopulated from persisted runs on startup); the LRU bound caps memory regardless of TTL.
+PROCESSED_CACHE_TTL = int(os.environ.get("STATE_RETENTION_DAYS", "30")) * 86400
 MAX_PROCESSED_ITEMS = 1000  # Maximum items to track in memory
 
 
@@ -341,6 +343,7 @@ class GitHubPoller:
         try:
             sandbox_name = k8shelper.create_sandbox(task)
             self.processed.put(key, ProcessedItem("issue", repo_full, number, time.time(), sandbox_name))
+            self._persist_processed("issue", repo_full, repo, number, sender, task["reason"], sandbox_name)
             self.stats["sandboxes_created"] += 1
             log.info(f"Created sandbox {sandbox_name} for new issue {repo_full}#{number}")
         except Exception as e:
@@ -426,6 +429,7 @@ class GitHubPoller:
         try:
             sandbox_name = k8shelper.create_sandbox(task)
             self.processed.put(key, ProcessedItem("pr", repo_full, number, time.time(), sandbox_name))
+            self._persist_processed("pr", repo_full, pr.base.repo, number, sender, task["reason"], sandbox_name)
             self.stats["sandboxes_created"] += 1
             log.info(f"Created sandbox {sandbox_name} for PR {repo_full}#{number}")
         except Exception as e:
@@ -498,29 +502,55 @@ class GitHubPoller:
             self._gh_token = token
             log.info("Refreshed GitHub client with App installation token")
 
+    def _persist_processed(
+        self, item_type: str, repo_full: str, repo, number: int, sender: str,
+        reason: str, sandbox_name: str,
+    ) -> None:
+        """Persist a processed item to the shared state so dedup survives restarts.
+
+        Without this, a receiver restart wipes the in-memory cache and the first poll
+        re-creates a sandbox for every open issue/PR.
+        """
+        try:
+            self.state_mgr.create_run(
+                sandbox_name=sandbox_name,
+                repo_full=repo_full,
+                repo_url=getattr(repo, "clone_url", ""),
+                branch=getattr(repo, "default_branch", ""),
+                trigger=Trigger(
+                    type=f"github_{item_type}", user=sender,
+                    issue_number=number, reason=reason,
+                ),
+                model="",
+                max_turns=0,
+            )
+        except Exception as e:
+            log.warning(f"Failed to persist processed {item_type} {number} to state: {e}")
+
     async def _load_processed(self) -> None:
-        """Load processed items from state manager."""
+        """Load processed items from the shared state manager (survives restarts)."""
         try:
             runs = self.state_mgr.list_runs(limit=1000)
             for run in runs:
-                # Reconstruct ProcessedItem from AgentRun
-                if run.task_id:
-                    try:
-                        parts = run.task_id.split("-")
-                        if len(parts) >= 3:
-                            number = int(parts[-2]) if parts[-2].isdigit() else 0
-                            repo_full = run.trigger_context.get("repo_full", "")
-                            item_type = run.trigger_context.get("trigger_type", "issue")
+                trigger = run.trigger
+                if not trigger or not run.repo_full:
+                    continue
+                # trigger.type is "github_issue" / "github_pr"; map back to cache key prefix
+                item_type = "pr" if trigger.type.endswith("pr") else "issue"
+                number = trigger.issue_number
+                if not number:
+                    continue
 
-                            key = f"{item_type}:{repo_full}:{number}"
-                            item = ProcessedItem(
-                                item_type, repo_full, number, run.created_at, run.sandbox_name
-                            )
-                            # Only add if not expired
-                            if not item.is_expired():
-                                self.processed.put(key, item)
-                    except (ValueError, IndexError):
-                        pass
+                # Convert ISO started_at to epoch for ProcessedItem TTL math
+                try:
+                    ts = datetime.fromisoformat(run.started_at).timestamp()
+                except (ValueError, TypeError):
+                    ts = time.time()
+
+                key = f"{item_type}:{run.repo_full}:{number}"
+                item = ProcessedItem(item_type, run.repo_full, number, ts, run.sandbox_name)
+                if not item.is_expired():
+                    self.processed.put(key, item)
 
             log.info(f"Loaded {len(self.processed.cache)} processed items from state")
 
