@@ -7,8 +7,9 @@ All configuration is through environment variables. No YAML config files, no har
 | Variable | Default | Description |
 |---|---|---|
 | `GITHUB_WEBHOOK_SECRET` | — | HMAC-SHA256 secret for GitHub webhook verification |
+| `GITLAB_WEBHOOK_SECRET` | — | Plain secret compared against the `X-Gitlab-Token` header on `POST /webhook/gitlab` (and `/api/v1/webhook/gitlab`). Unlike GitHub this is a direct token comparison, not HMAC |
 | `API_KEY` | — | API key for `/webhook/custom` endpoint auth |
-| `ALLOWED_USERS` | (all) | Comma-separated GitHub usernames allowed to trigger. Empty = allow all |
+| `ALLOWED_USERS` | (all) | Comma-separated GitHub/GitLab usernames allowed to trigger. Empty = allow all. Shared across GitHub and GitLab pollers |
 | `TRIGGER_PHRASE` | `/fix` | Comment trigger phrase for issue_comment webhook |
 | `LOG_LEVEL` | `INFO` | Log level: DEBUG, INFO, WARN, ERROR |
 
@@ -64,9 +65,12 @@ All configuration is through environment variables. No YAML config files, no har
 ## Agent (sandbox pod)
 
 The runner automatically forwards all env vars with the following prefixes to the SDK
-subprocess: `ANTHROPIC_*`, `CLAUDE_*`, `ANYROUTER_*`, `GIT_*`, `GH_*`, `SKILLS_*`, `MCP_*`.
+subprocess: `ANTHROPIC_*`, `CLAUDE_*`, `ANYROUTER_*`, `GIT_*`, `GH_*`, `GITLAB_*`, `GL_*`, `SKILLS_*`, `MCP_*`.
 No code changes needed when new env vars are added — just set them in the Secret or ConfigMap
 and they flow through to the SDK at runtime.
+
+Tasks carry a `provider` field (`github` or `gitlab`) that selects which auth, clone, and
+comment path the agent uses.
 
 ### Authentication
 
@@ -132,6 +136,27 @@ Available tools: Read, Write, Edit, Bash, Glob, Grep, Git, GitHub, WebSearch, We
 |---|---|---|
 | `GH_APP_ID` | Yes | GitHub App ID |
 | `GH_PRIVATE_KEY` | Yes | GitHub App private key (PEM, newlines as `\n`) |
+
+### GitLab
+
+GitLab support runs alongside GitHub. GitLab has no GitHub-App/installation-token model, so a
+static access token is used for both cloning and API calls.
+
+| Variable | Default | Description |
+|---|---|---|
+| `GITLAB_TOKEN` | — | GitLab Personal/Group/Project access token (fallback: `GL_TOKEN`). Used for cloning and API calls. Clone URL form: `https://oauth2:<token>@<host>/<group/project>.git` |
+| `GITLAB_URL` | `https://gitlab.com` | Base URL for self-hosted GitLab. API base is `${GITLAB_URL}/api/v4` |
+
+### Pull Mode (poller)
+
+The poller can watch GitHub and/or GitLab. `PULL_MODE_INTERVAL_MINUTES` and `ALLOWED_USERS`
+are shared across both pollers.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PULL_MODE_GITLAB_ENABLED` | `false` | Enable the GitLab poller |
+| `PULL_MODE_GITLAB_PROJECTS` | — | Comma-separated `group/project` paths to poll |
+| `PULL_MODE_GITLAB_EVENTS` | `issues` | Comma list, subset of `issues,mrs` |
 
 ### Task
 
