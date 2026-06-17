@@ -1,25 +1,27 @@
 """Webhook receiver. Verifies HMAC or API key, extracts triggers, creates Sandbox CR."""
-import asyncio
 import hashlib
 import hmac
 import json
 import os
-import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, Response
 
 from . import k8shelper
-from .common import get_logger
+from .common import build_task, get_logger, user_allowed
 from .poller import start_poller
 
 log = get_logger("receiver")
-app = FastAPI(title="claude-agent-runner webhook receiver")
 
-# Startup event: start poller if enabled
-@app.on_event("startup")
-async def startup():
-    """Start background poller if pull mode is enabled."""
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start the background poller (if pull mode is enabled) on startup."""
     await start_poller()
+    yield
+
+
+app = FastAPI(title="claude-agent-runner webhook receiver", lifespan=lifespan)
 
 WEBHOOK_SECRET = os.environ.get("GITHUB_WEBHOOK_SECRET", "").encode()
 API_KEY = os.environ.get("API_KEY", "")
@@ -44,11 +46,13 @@ def _verify_api_key(request: Request) -> bool:
     return hmac.compare_digest(key, API_KEY)
 
 
-def _allowed(sender: str) -> bool:
-    if not ALLOWED:
-        return True
-    base = sender.lower().removesuffix("[bot]")
-    return sender.lower() in ALLOWED or base in ALLOWED
+def _accepted(name: str) -> Response:
+    """Build the 202 Accepted response returned after creating a Sandbox CR."""
+    return Response(
+        status_code=202,
+        content=json.dumps({"accepted": True, "sandbox": name}),
+        media_type="application/json",
+    )
 
 
 @app.get("/api/v1/healthz")
@@ -75,12 +79,7 @@ async def github(request: Request):
     if event == "issues" and ISSUE_LABEL:
         task = _extract_issue(payload)
         if task is not None:
-            name = k8shelper.create_sandbox(task)
-            return Response(
-                status_code=202,
-                content=json.dumps({"accepted": True, "sandbox": name}),
-                media_type="application/json",
-            )
+            return _accepted(k8shelper.create_sandbox(task))
         return {"ok": True, "skipped": True}
 
     if event != "issue_comment":
@@ -90,12 +89,7 @@ async def github(request: Request):
     if task is None:
         return {"ok": True, "skipped": True}
 
-    name = k8shelper.create_sandbox(task)
-    return Response(
-        status_code=202,
-        content=json.dumps({"accepted": True, "sandbox": name}),
-        media_type="application/json",
-    )
+    return _accepted(k8shelper.create_sandbox(task))
 
 
 @app.post("/api/v1/webhook/custom")
@@ -121,28 +115,20 @@ async def custom(request: Request):
     except json.JSONDecodeError:
         raise HTTPException(400, "invalid json")
 
-    ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in task_in.get("repo_full", "custom")).strip("-")
-    task = {
-        "sandbox_name": f"fix-{safe}-{task_in.get('number', 0)}-{ts}"[:58],
-        "repo_full": task_in.get("repo_full", ""),
-        "clone_url": task_in.get("clone_url", ""),
-        "default_branch": task_in.get("default_branch", "main"),
-        "number": task_in.get("number", 0),
-        "title": task_in.get("title", ""),
-        "body": task_in.get("body", "") or "",
-        "instruction": task_in.get("instruction", ""),
-        "sender": task_in.get("sender", "api"),
-        "is_pr": task_in.get("is_pr", False),
-        "reason": f"custom trigger by api",
-    }
-
-    name = k8shelper.create_sandbox(task)
-    return Response(
-        status_code=202,
-        content=json.dumps({"accepted": True, "sandbox": name}),
-        media_type="application/json",
+    task = build_task(
+        repo_full=task_in.get("repo_full", ""),
+        number=task_in.get("number", 0),
+        title=task_in.get("title", ""),
+        body=task_in.get("body", ""),
+        sender=task_in.get("sender", "api"),
+        reason="custom trigger by api",
+        default_branch=task_in.get("default_branch", "main"),
+        clone_url=task_in.get("clone_url", ""),
+        instruction=task_in.get("instruction", ""),
+        is_pr=task_in.get("is_pr", False),
     )
+
+    return _accepted(k8shelper.create_sandbox(task))
 
 
 def _extract_issue(p: dict) -> dict | None:
@@ -155,27 +141,20 @@ def _extract_issue(p: dict) -> dict | None:
         return None
 
     sender = (p.get("sender") or {}).get("login", "")
-    if not _allowed(sender):
+    if not user_allowed(sender, ALLOWED):
         return None
 
     repo = p.get("repository", {})
-    num = issue.get("number")
-    ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in repo.get("full_name", "")).strip("-")
-
-    return {
-        "sandbox_name": f"fix-{safe}-{num}-{ts}"[:58],
-        "repo_full": repo.get("full_name"),
-        "clone_url": repo.get("clone_url"),
-        "default_branch": repo.get("default_branch", "main"),
-        "number": num,
-        "title": issue.get("title", ""),
-        "body": issue.get("body", "") or "",
-        "instruction": "",
-        "sender": sender,
-        "is_pr": False,
-        "reason": f"issue opened with label '{ISSUE_LABEL}'",
-    }
+    return build_task(
+        repo_full=repo.get("full_name", ""),
+        number=issue.get("number"),
+        title=issue.get("title", ""),
+        body=issue.get("body", ""),
+        sender=sender,
+        reason=f"issue opened with label '{ISSUE_LABEL}'",
+        default_branch=repo.get("default_branch", "main"),
+        clone_url=repo.get("clone_url", ""),
+    )
 
 
 def _extract(p: dict) -> dict | None:
@@ -184,7 +163,7 @@ def _extract(p: dict) -> dict | None:
         return None
 
     sender = (p.get("sender") or {}).get("login", "")
-    if not _allowed(sender):
+    if not user_allowed(sender, ALLOWED):
         return None
 
     comment = (p.get("comment") or {}).get("body", "").strip()
@@ -196,20 +175,15 @@ def _extract(p: dict) -> dict | None:
 
     repo = p.get("repository", {})
     issue = p.get("issue", {})
-    num = issue.get("number")
-    ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in repo.get("full_name", "")).strip("-")
-
-    return {
-        "sandbox_name": f"fix-{safe}-{num}-{ts}"[:58],
-        "repo_full": repo.get("full_name"),
-        "clone_url": repo.get("clone_url"),
-        "default_branch": repo.get("default_branch", "main"),
-        "number": num,
-        "title": issue.get("title", ""),
-        "body": issue.get("body", "") or "",
-        "instruction": comment[len(TRIGGER):].strip(),
-        "sender": sender,
-        "is_pr": "pull_request" in issue,
-        "reason": f"{TRIGGER} by {sender}",
-    }
+    return build_task(
+        repo_full=repo.get("full_name", ""),
+        number=issue.get("number"),
+        title=issue.get("title", ""),
+        body=issue.get("body", ""),
+        sender=sender,
+        reason=f"{TRIGGER} by {sender}",
+        default_branch=repo.get("default_branch", "main"),
+        clone_url=repo.get("clone_url", ""),
+        instruction=comment[len(TRIGGER):].strip(),
+        is_pr="pull_request" in issue,
+    )
