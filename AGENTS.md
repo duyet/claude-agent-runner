@@ -7,6 +7,8 @@
 
 General-purpose Claude Agent SDK runner for Kubernetes. Receives webhook triggers (`/fix` on issue comments), spawns ephemeral Sandbox pods, and lets the agent handle everything via its built-in tools.
 
+**Supports both GitHub and GitLab** (webhook + pull mode). The provider is selected per-task via a `provider` field on the task payload, defaulting to GitHub.
+
 **NOT a code-fixing tool specifically** — it's a general-purpose runner. The default system prompt is embedded in `app/agent.py`. Override via `SYSTEM_PROMPT_PATH` env var or `APPEND_SYSTEM_PROMPT`.
 
 ## Repo Layout
@@ -17,6 +19,8 @@ app/
   agent.py          # Clone repo → run Claude Agent SDK → delete sandbox
   common.py         # Env helpers, logging, task decoding
   gh_token.py       # GitHub App JWT → installation token (cached, 60-min TTL)
+  gl_token.py       # GitLab token + clone-remote helper (analogue of gh_token.py)
+  gl_poller.py      # GitLab pull-mode poller (analogue of poller.py)
   k8shelper.py      # Create/delete Sandbox CRs (agents.x-k8s.io/v1alpha1)
   receiver.py       # FastAPI webhook receiver — HMAC verify, /fix extract, CR create
 
@@ -55,6 +59,8 @@ agent.py (inside pod — clone repo → run Claude Agent SDK → self-delete)
 | `app/receiver.py` | FastAPI — `/webhook/github` and `/webhook/custom`, HMAC/API key verify |
 | `app/agent.py` | Runs in sandbox — clones repo, launches Claude Agent SDK |
 | `app/gh_token.py` | GitHub App JWT → installation access token (cached) |
+| `app/gl_token.py` | GitLab token + clone-remote helper (analogue of `gh_token.py`) |
+| `app/gl_poller.py` | GitLab pull-mode poller (analogue of `poller.py`) |
 | `app/k8shelper.py` | Sandbox CR lifecycle — pod template, PVC, env from secret/configmap |
 | `app/agent.py` (`DEFAULT_SYSTEM_PROMPT`) | Embedded system prompt (or `SYSTEM_PROMPT_PATH`) |
 | `docs/configuration.md` | Full env var reference |
@@ -65,11 +71,15 @@ Full reference at [docs/configuration.md](docs/configuration.md).
 
 **Receiver:** `GITHUB_WEBHOOK_SECRET`, `API_KEY`, `ALLOWED_USERS`, `TRIGGER_PHRASE`
 
+**GitLab:** `GITLAB_TOKEN` (fallback `GL_TOKEN`), `GITLAB_URL` (default `https://gitlab.com`), `GITLAB_WEBHOOK_SECRET`. Pull mode: `PULL_MODE_GITLAB_ENABLED`, `PULL_MODE_GITLAB_PROJECTS`, `PULL_MODE_GITLAB_EVENTS`. The receiver also exposes `/webhook/gitlab` (plain `X-Gitlab-Token` header auth, not HMAC).
+
 **Sandbox pod template:** `SANDBOX_NAMESPACE`, `SANDBOX_IMAGE`, `SANDBOX_SERVICE_ACCOUNT`, `SANDBOX_CPU_REQUEST`, `SANDBOX_MEM_REQUEST`, `SANDBOX_DEADLINE_SECONDS`, etc.
 
 **Agent:** `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `CLAUDE_PERMISSION_MODE`, `CLAUDE_MAX_TURNS`, `ALLOWED_TOOLS`, `SKILLS_DIR`, `SETTING_SOURCES`, `SKILLS`, `PLUGINS`, `MCP_SERVERS`, `SYSTEM_PROMPT_PATH`, `APPEND_SYSTEM_PROMPT`, `ANTHROPIC_PLUGIN_MARKETPLACES`, `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `CO_AUTHOR_NAME`, `GH_APP_ID`, `GH_PRIVATE_KEY`
 
 **AnyRouter / custom LLM:** `ANTHROPIC_BASE_URL` + `ANYROUTER_API_KEY`
+
+**SDK env-forwarding prefixes** (auto-forwarded to the SDK subprocess) now also include `GITLAB_*` and `GL_*`, alongside `ANTHROPIC_*`, `CLAUDE_*`, `ANYROUTER_*`, `GIT_*`, `GH_*`, `SKILLS_*`, `MCP_*`.
 
 **CLI args (override env):** `--model`, `--max-turns`, `--append-system-prompt` — passed via `SANDBOX_CONTAINER_ARGS`
 
