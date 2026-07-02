@@ -61,9 +61,6 @@ temp/
 build/
 dist/
 
-# Docker
-.dockerignore
-
 # Kubernetes
 *.kubeconfig
 kubeconfig
