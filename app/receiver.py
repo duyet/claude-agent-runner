@@ -9,7 +9,7 @@ import time
 from fastapi import FastAPI, HTTPException, Request, Response
 
 from . import k8shelper
-from .common import get_logger
+from .common import get_logger, make_sandbox_name
 from .poller import start_poller
 
 log = get_logger("receiver")
@@ -112,7 +112,9 @@ async def custom(request: Request):
       "instruction": "..."
     }
     """
-    if API_KEY and not _verify_api_key(request):
+    # Fail closed: mirror _verify_hmac. When API_KEY is unset the endpoint has
+    # no way to authenticate the caller, so reject rather than accept anonymously.
+    if not _verify_api_key(request):
         raise HTTPException(401, "invalid api key")
 
     body = await request.body()
@@ -122,9 +124,10 @@ async def custom(request: Request):
         raise HTTPException(400, "invalid json")
 
     ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in task_in.get("repo_full", "custom")).strip("-")
     task = {
-        "sandbox_name": f"fix-{safe}-{task_in.get('number', 0)}-{ts}"[:58],
+        "sandbox_name": make_sandbox_name(
+            task_in.get("repo_full", "custom"), task_in.get("number", 0), ts
+        ),
         "repo_full": task_in.get("repo_full", ""),
         "clone_url": task_in.get("clone_url", ""),
         "default_branch": task_in.get("default_branch", "main"),
@@ -161,10 +164,9 @@ def _extract_issue(p: dict) -> dict | None:
     repo = p.get("repository", {})
     num = issue.get("number")
     ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in repo.get("full_name", "")).strip("-")
 
     return {
-        "sandbox_name": f"fix-{safe}-{num}-{ts}"[:58],
+        "sandbox_name": make_sandbox_name(repo.get("full_name", ""), num, ts),
         "repo_full": repo.get("full_name"),
         "clone_url": repo.get("clone_url"),
         "default_branch": repo.get("default_branch", "main"),
@@ -198,10 +200,9 @@ def _extract(p: dict) -> dict | None:
     issue = p.get("issue", {})
     num = issue.get("number")
     ts = int(time.time())
-    safe = "".join(c.lower() if c.isalnum() else "-" for c in repo.get("full_name", "")).strip("-")
 
     return {
-        "sandbox_name": f"fix-{safe}-{num}-{ts}"[:58],
+        "sandbox_name": make_sandbox_name(repo.get("full_name", ""), num, ts),
         "repo_full": repo.get("full_name"),
         "clone_url": repo.get("clone_url"),
         "default_branch": repo.get("default_branch", "main"),

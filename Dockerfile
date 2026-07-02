@@ -15,6 +15,10 @@ RUN pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app
 
+# Drop privileges: run as the non-root agent user (UID 1000) created above.
+# Matches the sandbox securityContext (runAsNonRoot / runAsUser 1000).
+USER agent
+
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["uvicorn", "app.receiver:app", "--host", "0.0.0.0", "--port", "8080"]

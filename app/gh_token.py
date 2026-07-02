@@ -56,7 +56,10 @@ def token_for(repo_full: str) -> str:
         return cached[0]
 
     jwt_tok = _mint_jwt(app_id, key)
-    owner, repo = repo_full.split("/")
+    parts = repo_full.split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"invalid repo_full {repo_full!r}: expected 'owner/repo'")
+    owner, repo = parts
     inst = _installation_id(jwt_tok, owner, repo)
     tok, exp = _install_token(jwt_tok, inst)
     _cache[repo_full] = (tok, exp)

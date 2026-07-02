@@ -1,0 +1,30 @@
+# Version control
+.git
+.gitignore
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+
+# CI / editor / docs
+.github/
+.vscode/
+.idea/
+*.md
+docs/
+
+# Local env
+.env
+.env.*
