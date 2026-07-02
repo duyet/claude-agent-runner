@@ -46,6 +46,29 @@ _RELEVANT_ENV_PREFIXES = (
     "ANTHROPIC_", "CLAUDE_", "ANYROUTER_", "GIT_", "GH_", "SKILLS_", "MCP_"
 )
 
+# Secrets that must NEVER be forwarded to the SDK subprocess even though they
+# match a relevant prefix (e.g. "GH_"). The GitHub App private key and App ID
+# are only needed by the receiver/poller to mint short-lived installation
+# tokens; the agent already has GH_TOKEN/GITHUB_TOKEN for GitHub access.
+_SECRET_ENV_BLOCKLIST = frozenset({"GH_PRIVATE_KEY", "GH_APP_ID"})
+
+
+def _build_sdk_env(environ) -> dict[str, str]:
+    """Select env vars to forward to the SDK subprocess.
+
+    Forwards only vars matching a relevant prefix, and never forwards the
+    GitHub App secrets in ``_SECRET_ENV_BLOCKLIST`` (e.g. GH_PRIVATE_KEY,
+    GH_APP_ID) even though they match the ``GH_`` prefix. The agent uses the
+    already-minted GH_TOKEN/GITHUB_TOKEN instead.
+    """
+    return {
+        k: v
+        for k, v in environ.items()
+        if k.startswith(_RELEVANT_ENV_PREFIXES)
+        and k not in _SECRET_ENV_BLOCKLIST
+        and v
+    }
+
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="claude-agent-runner")
@@ -151,7 +174,10 @@ def main() -> None:
     run = st.create_run(
         sandbox_name=task["sandbox_name"],
         repo_full=repo_full,
-        repo_url=remote,
+        # Persist the clean (token-free) URL. `remote` embeds the installation
+        # token (https://x-access-token:<TOKEN>@github.com/...) and must never
+        # be written to disk via state.save_run.
+        repo_url=f"https://github.com/{repo_full}.git",
         branch=task.get("default_branch", "main"),
         trigger=trigger,
         model=model,
@@ -319,10 +345,7 @@ async def run_agent_sdk(
 
     # Forward relevant env vars to the SDK subprocess so it can read
     # ANTHROPIC_API_KEY, ANTHROPIC_PLUGIN_MARKETPLACES, etc. directly.
-    sdk_env = {
-        k: v for k, v in os.environ.items()
-        if k.startswith(_RELEVANT_ENV_PREFIXES) and v
-    }
+    sdk_env = _build_sdk_env(os.environ)
     if sdk_env:
         opts.env = sdk_env
 
