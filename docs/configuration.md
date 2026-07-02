@@ -10,7 +10,26 @@ All configuration is through environment variables. No YAML config files, no har
 | `API_KEY` | — | API key for `/webhook/custom` endpoint auth |
 | `ALLOWED_USERS` | (all) | Comma-separated GitHub usernames allowed to trigger. Empty = allow all |
 | `TRIGGER_PHRASE` | `/fix` | Comment trigger phrase for issue_comment webhook |
+| `ISSUE_LABEL` | — | If set, `issues.opened` webhooks whose issue carries this (case-insensitive) label are auto-triggered. Empty = disabled |
 | `LOG_LEVEL` | `INFO` | Log level: DEBUG, INFO, WARN, ERROR |
+
+> Note: `/webhook/custom` fails **closed** — when `API_KEY` is unset the endpoint
+> rejects all requests (401). Set `API_KEY` to enable it.
+
+## Pull Mode (poller)
+
+Polls configured repos via the GitHub API instead of receiving webhooks. Useful
+for homelab / private clusters with no public webhook endpoint.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PULL_MODE_ENABLED` | `false` | Enable the background poller (`true` to turn on) |
+| `PULL_MODE_INTERVAL_MINUTES` | `5` | Minutes between poll cycles |
+| `PULL_MODE_REPOS` | — | Comma-separated `owner/repo` list to poll |
+| `PULL_MODE_EVENTS` | `issues` | Comma-separated event types: `issues`, `prs` |
+| `STATE_RETENTION_DAYS` | `30` | Dedup/processed-cache TTL in days |
+| `GH_TOKEN` | — | Personal access token fallback when App creds (`GH_APP_ID`/`GH_PRIVATE_KEY`) are absent |
+| `ALLOWED_USERS` | (all) | Same allowlist as the receiver; empty = allow all |
 
 ## Kubernetes Sandbox CR (receiver-side)
 
@@ -19,7 +38,7 @@ All configuration is through environment variables. No YAML config files, no har
 | Variable | Default | Description |
 |---|---|---|
 | `SANDBOX_NAMESPACE` | `agent-sandbox` | Namespace for Sandbox CRs |
-| `SANDBOX_IMAGE` | `ghcr.io/duyetbot/claude-agent-runner:latest` | Image for sandbox pods |
+| `SANDBOX_IMAGE` | `ghcr.io/duyet/claude-agent-runner:latest` | Image for sandbox pods |
 | `SANDBOX_IMAGE_PULL_POLICY` | `Always` | Image pull policy |
 
 ### Container
@@ -30,7 +49,7 @@ All configuration is through environment variables. No YAML config files, no har
 | `SANDBOX_CONTAINER_COMMAND` | `python -m app.agent` | Container entrypoint |
 | `SANDBOX_CONTAINER_ARGS` | — | Additional CLI args for the entrypoint (space-separated, e.g. `--model claude-sonnet-4-6 --max-turns 10`) |
 | `SANDBOX_CONTAINER_WORKDIR` | `/workspace` | Working directory |
-| `SANDBOX_SERVICE_ACCOUNT` | `claude-agent-runner` | K8s service account |
+| `SANDBOX_SERVICE_ACCOUNT` | `agent-runner` | K8s service account |
 | `SANDBOX_RUN_AS_USER` | `1000` | Container UID |
 | `SANDBOX_RUN_AS_GROUP` | `1000` | Container FS group |
 | `SANDBOX_RESTART_POLICY` | `Never` | Pod restart policy |
@@ -57,16 +76,22 @@ All configuration is through environment variables. No YAML config files, no har
 
 | Variable | Default | Description |
 |---|---|---|
-| `SANDBOX_SECRET_REF` | `claude-agent-runner-secret` | Secret name for envFrom |
-| `SANDBOX_CONFIGMAP_REF` | `claude-agent-runner-config` | ConfigMap name for envFrom |
+| `SANDBOX_SECRET_REF` | `agent-runner-secret` | Secret name for envFrom |
+| `SANDBOX_CONFIGMAP_REF` | `agent-runner-config` | ConfigMap name for envFrom |
 | `SANDBOX_APP_LABEL` | `claude-agent-runner` | App label for pod metadata |
 
 ## Agent (sandbox pod)
 
-The runner automatically forwards all env vars with the following prefixes to the SDK
+The runner automatically forwards env vars with the following prefixes to the SDK
 subprocess: `ANTHROPIC_*`, `CLAUDE_*`, `ANYROUTER_*`, `GIT_*`, `GH_*`, `SKILLS_*`, `MCP_*`.
 No code changes needed when new env vars are added — just set them in the Secret or ConfigMap
 and they flow through to the SDK at runtime.
+
+**Security exception:** the GitHub App secrets `GH_PRIVATE_KEY` and `GH_APP_ID` are
+explicitly **excluded** from this forwarding even though they match the `GH_*` prefix.
+They are only needed by the receiver/poller to mint short-lived installation tokens; the
+agent subprocess receives the already-minted `GH_TOKEN`/`GITHUB_TOKEN` instead, so the
+long-lived private key never enters the agent's environment.
 
 ### Authentication
 
