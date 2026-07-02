@@ -62,7 +62,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -498,7 +498,7 @@ class FileStorage(StorageBackendABC):
         try:
             return datetime.fromisoformat(iso_ts).strftime("%Y/%m/%d")
         except (ValueError, TypeError):
-            return datetime.utcnow().strftime("%Y/%m/%d")
+            return datetime.now(timezone.utc).strftime("%Y/%m/%d")
 
     def _run_path(self, run_id: str, created_at: str | None = None) -> Path:
         """Get the write path for a run file, organized by its creation date.
@@ -512,7 +512,7 @@ class FileStorage(StorageBackendABC):
         Returns:
             Path to run JSON file
         """
-        date = self._date_dir(created_at) if created_at else datetime.utcnow().strftime("%Y/%m/%d")
+        date = self._date_dir(created_at) if created_at else datetime.now(timezone.utc).strftime("%Y/%m/%d")
         path = self.runs_dir / date / f"{run_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
@@ -538,7 +538,7 @@ class FileStorage(StorageBackendABC):
         Returns:
             Path to compressed session file
         """
-        date = self._date_dir(created_at) if created_at else datetime.utcnow().strftime("%Y/%m/%d")
+        date = self._date_dir(created_at) if created_at else datetime.now(timezone.utc).strftime("%Y/%m/%d")
         path = self.sessions_dir / date / f"{session_id}.json.gz"
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
@@ -564,6 +564,20 @@ class FileStorage(StorageBackendABC):
             log.warning("Failed to load run %s: %s", run_id, exc)
             return None
 
+    @staticmethod
+    def _date_dirs_desc(root: Path) -> list[Path]:
+        """Return the YYYY/MM/DD leaf directories under root, newest date first.
+
+        Directory names are zero-padded numeric segments, so a reverse
+        lexicographic sort is chronological.
+        """
+        dirs: list[Path] = []
+        for year in sorted((d for d in root.glob("*") if d.is_dir()), reverse=True):
+            for month in sorted((d for d in year.glob("*") if d.is_dir()), reverse=True):
+                for day in sorted((d for d in month.glob("*") if d.is_dir()), reverse=True):
+                    dirs.append(day)
+        return dirs
+
     def list_runs(
         self,
         repo_full: Optional[str] = None,
@@ -571,27 +585,30 @@ class FileStorage(StorageBackendABC):
         limit: int = 100,
     ) -> list[AgentRun]:
         runs: list[AgentRun] = []
-        for path in self.runs_dir.rglob("*.json"):
-            try:
-                data = json.loads(path.read_text())
-                run = AgentRun.from_dict(data)
+        # Walk date directories newest-first so we can stop once we hold enough
+        # candidates, instead of loading every historical run file into memory.
+        # Because each date dir is strictly older than the previous, once we have
+        # >= limit matches after finishing a dir, the newest `limit` are all here.
+        for date_dir in self._date_dirs_desc(self.runs_dir):
+            for path in date_dir.glob("*.json"):
+                try:
+                    data = json.loads(path.read_text())
+                    run = AgentRun.from_dict(data)
+                except (json.JSONDecodeError, KeyError):
+                    continue
                 if repo_full and run.repo_full != repo_full:
                     continue
                 if status and run.status != status:
                     continue
                 runs.append(run)
-            except (json.JSONDecodeError, KeyError):
-                continue
-        # Sort all candidates newest-first, THEN apply the limit — truncating
-        # before sorting would drop the newest runs when they sit later on disk.
+            if len(runs) >= limit:
+                break
         return sorted(runs, key=lambda r: r.started_at, reverse=True)[:limit]
 
     def save_session(self, session: AgentSession) -> None:
-        # Reuse the existing file if the session was created on an earlier day,
-        # otherwise write under the creation date so re-saves stay co-located.
-        path = self._find_session_path(session.session_id) or self._session_path(
-            session.session_id, session.started_at
-        )
+        # started_at is fixed at creation, so the path is deterministic across
+        # re-saves (even after a day rollover) — no directory search needed.
+        path = self._session_path(session.session_id, session.started_at)
         data = json.dumps(session.to_dict())
         path.write_bytes(gzip.compress(data.encode()))
 
