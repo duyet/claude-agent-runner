@@ -4,7 +4,7 @@ import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from github import Github, GithubException
@@ -12,7 +12,7 @@ from github.Issue import Issue as PyGithubIssue
 from github.PullRequest import PullRequest as PyGithubPR
 
 from . import gh_token, k8shelper
-from .common import get_logger
+from .common import get_logger, make_sandbox_name
 from .state import StateManager, Trigger
 
 log = get_logger("poller")
@@ -115,6 +115,11 @@ class GitHubPoller:
         self.github: Github | None = None
         self._gh_token: str | None = None  # current App installation token (for rotation)
         self.last_poll_times: dict[str, float] = {}  # repo_full -> timestamp
+        # Repos with a per-cycle cap overflow still to drain. While a repo is in
+        # one of these sets we keep scanning past already-processed items (instead
+        # of breaking) so the older overflow items aren't permanently skipped.
+        self._issue_backlog: set[str] = set()
+        self._pr_backlog: set[str] = set()
         self.rate_limit_reset: float = 0
         self.remaining_requests: int = 5000  # GitHub default for authenticated
         # Per-cycle counters, reset at the start of each _poll_once
@@ -225,25 +230,38 @@ class GitHubPoller:
         # Update rate limit info from response headers
         self._update_rate_limit_info()
 
-        # Get last poll time for this repo
+        # Get last poll time for this repo. Use timezone-aware UTC so comparisons
+        # against GitHub's UTC-aware timestamps (issue/PR created_at) are correct.
         last_poll = self.last_poll_times.get(repo_full, 0)
-        since_time = datetime.fromtimestamp(last_poll) if last_poll > 0 else None
+        since_time = (
+            datetime.fromtimestamp(last_poll, tz=timezone.utc) if last_poll > 0 else None
+        )
         since_desc = since_time.isoformat() if since_time else "beginning (first poll)"
         log.info(f"Polling {repo_full} (since {since_desc})")
 
         issues_before = self.stats["issues_fetched"]
         prs_before = self.stats["prs_fetched"]
 
+        cap_hit = False
+
         # Check for new issues
         if "issues" in EVENT_TYPES:
-            await self._check_new_issues(repo_full, repo, since_time)
+            cap_hit = await self._check_new_issues(repo_full, repo, since_time) or cap_hit
 
         # Check pull requests
         if "prs" in EVENT_TYPES:
-            await self._check_pull_requests(repo_full, repo, since_time)
+            cap_hit = await self._check_pull_requests(repo_full, repo, since_time) or cap_hit
 
-        # Update last poll time
-        self.last_poll_times[repo_full] = time.time()
+        # Only advance the watermark when we fully drained this repo. If the
+        # per-cycle cap truncated processing, keep the same `since` window so the
+        # overflow is re-fetched next cycle instead of being skipped forever.
+        if not cap_hit:
+            self.last_poll_times[repo_full] = time.time()
+        else:
+            log.warning(
+                f"{repo_full}: per-cycle cap hit — not advancing watermark, "
+                f"will drain remaining items next cycle"
+            )
 
         log.info(
             f"Polled {repo_full} in {time.time() - repo_started:.1f}s | "
@@ -251,8 +269,16 @@ class GitHubPoller:
             f"prs_scanned={self.stats['prs_fetched'] - prs_before}"
         )
 
-    async def _check_new_issues(self, repo_full: str, repo, since_time: datetime | None) -> None:
-        """Check for newly opened issues since last poll."""
+    async def _check_new_issues(
+        self, repo_full: str, repo, since_time: datetime | None
+    ) -> bool:
+        """Check for newly opened issues since last poll.
+
+        Returns True if the per-cycle safety cap was hit (i.e. there is still
+        overflow to drain), so the caller can avoid advancing the watermark.
+        """
+        draining = repo_full in self._issue_backlog
+        cap_hit = False
         try:
             # Build query parameters - only get issues created since last poll
             kwargs = {"state": "open", "sort": "created", "direction": "desc"}
@@ -280,9 +306,14 @@ class GitHubPoller:
                     skipped_prs += 1
                     continue
 
-                # Stop if we've seen this issue before
+                # Skip issues we've already handled. Normally the newest already-
+                # processed item means everything older is processed too, so we can
+                # stop. But while draining a prior cap overflow the processed items
+                # are interleaved with unprocessed ones, so keep scanning instead.
                 key = f"issue:{repo_full}:{issue.number}"
                 if self.processed.get(key):
+                    if draining:
+                        continue
                     log.debug(f"Stopping at issue {issue.number} (already processed)")
                     break
 
@@ -292,6 +323,7 @@ class GitHubPoller:
                 # Safety limit to avoid processing too many issues at once
                 if processed_count >= 50:
                     log.warning("Hit safety limit of 50 issues per poll cycle")
+                    cap_hit = True
                     break
 
             log.info(
@@ -302,6 +334,12 @@ class GitHubPoller:
         except GithubException as e:
             self.stats["errors"] += 1
             log.error(f"GitHub API error fetching new issues: {e}")
+
+        if cap_hit:
+            self._issue_backlog.add(repo_full)
+        else:
+            self._issue_backlog.discard(repo_full)
+        return cap_hit
 
     async def _process_new_issue(self, repo_full: str, repo, issue: PyGithubIssue) -> None:
         """Process a new issue (all issues, not just labeled)."""
@@ -324,9 +362,8 @@ class GitHubPoller:
 
         # Create task
         ts = int(time.time())
-        safe = "".join(c.lower() if c.isalnum() else "-" for c in repo_full).strip("-")
         task = {
-            "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
+            "sandbox_name": make_sandbox_name(repo_full, number, ts),
             "repo_full": repo_full,
             "clone_url": repo.clone_url,
             "default_branch": repo.default_branch,
@@ -347,11 +384,29 @@ class GitHubPoller:
             self.stats["sandboxes_created"] += 1
             log.info(f"Created sandbox {sandbox_name} for new issue {repo_full}#{number}")
         except Exception as e:
+            if getattr(e, "status", None) == 409:
+                # Sandbox already exists — a duplicate for this item is already in
+                # flight. Treat as handled so we don't retry it forever.
+                self.processed.put(
+                    key, ProcessedItem("issue", repo_full, number, time.time(), task["sandbox_name"])
+                )
+                self._persist_processed(
+                    "issue", repo_full, repo, number, sender, task["reason"], task["sandbox_name"]
+                )
+                log.info(f"Sandbox already exists for issue {repo_full}#{number}; marked processed")
+                return
             self.stats["errors"] += 1
             log.error(f"Failed to create sandbox for issue {number}: {e}")
 
-    async def _check_pull_requests(self, repo_full: str, repo, since_time: datetime | None) -> None:
-        """Check for recent pull requests since last poll."""
+    async def _check_pull_requests(
+        self, repo_full: str, repo, since_time: datetime | None
+    ) -> bool:
+        """Check for recent pull requests since last poll.
+
+        Returns True if the per-cycle safety cap was hit (overflow remains).
+        """
+        draining = repo_full in self._pr_backlog
+        cap_hit = False
         try:
             kwargs = {"state": "open", "sort": "created", "direction": "desc"}
 
@@ -364,13 +419,22 @@ class GitHubPoller:
             for pr in prs:
                 scanned += 1
                 self.stats["prs_fetched"] += 1
-                # Stop if PR was created before our cutoff
-                if cutoff and pr.created_at.replace(tzinfo=None) < cutoff:
-                    break
+                # Stop if PR was created before our cutoff. GitHub's created_at is
+                # timezone-aware UTC; compare against our aware cutoff directly
+                # (normalizing to UTC in case a naive value slips through).
+                if cutoff:
+                    created = pr.created_at
+                    if created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    if created < cutoff:
+                        break
 
-                # Stop if we've seen this PR before
+                # Skip PRs we've already handled (keep scanning while draining a
+                # prior cap overflow; otherwise stop at the first processed one).
                 key = f"pr:{repo_full}:{pr.number}"
                 if self.processed.get(key):
+                    if draining:
+                        continue
                     log.debug(f"Stopping at PR {pr.number} (already processed)")
                     break
 
@@ -379,6 +443,7 @@ class GitHubPoller:
 
                 if processed_count >= 20:
                     log.warning("Hit safety limit of 20 PRs per poll cycle")
+                    cap_hit = True
                     break
 
             log.info(
@@ -388,6 +453,12 @@ class GitHubPoller:
         except GithubException as e:
             self.stats["errors"] += 1
             log.error(f"GitHub API error fetching PRs: {e}")
+
+        if cap_hit:
+            self._pr_backlog.add(repo_full)
+        else:
+            self._pr_backlog.discard(repo_full)
+        return cap_hit
 
     async def _process_pull_request(self, repo_full: str, pr: PyGithubPR) -> None:
         """Process a pull request."""
@@ -410,9 +481,8 @@ class GitHubPoller:
 
         # Create task
         ts = int(time.time())
-        safe = "".join(c.lower() if c.isalnum() else "-" for c in repo_full).strip("-")
         task = {
-            "sandbox_name": f"fix-{safe}-{number}-{ts}"[:58],
+            "sandbox_name": make_sandbox_name(repo_full, number, ts),
             "repo_full": repo_full,
             "clone_url": pr.base.repo.clone_url,
             "default_branch": pr.base.repo.default_branch,
@@ -433,6 +503,16 @@ class GitHubPoller:
             self.stats["sandboxes_created"] += 1
             log.info(f"Created sandbox {sandbox_name} for PR {repo_full}#{number}")
         except Exception as e:
+            if getattr(e, "status", None) == 409:
+                # Sandbox already exists — treat as handled to stop retry loops.
+                self.processed.put(
+                    key, ProcessedItem("pr", repo_full, number, time.time(), task["sandbox_name"])
+                )
+                self._persist_processed(
+                    "pr", repo_full, pr.base.repo, number, sender, task["reason"], task["sandbox_name"]
+                )
+                log.info(f"Sandbox already exists for PR {repo_full}#{number}; marked processed")
+                return
             self.stats["errors"] += 1
             log.error(f"Failed to create sandbox for PR {number}: {e}")
 
